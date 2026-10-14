@@ -8,7 +8,7 @@ These need your identity or payment, so nobody can do them for you:
 
 1. **Apple Developer Program**: enroll at https://developer.apple.com/programs/ ($99/year). Approval can take a day or two.
 2. **Expo account** (free): sign up at https://expo.dev. Expo builds the iPhone app in the cloud, so **you don't need a Mac**.
-3. **Put the website online first.** The app loads it (see the main README). You'll need its HTTPS address.
+3. **Put the website online first.** The app loads it. Use the one-click **Deploy to Render** button in the main README. You'll need its HTTPS address.
 
 > **Shortcut:** connect the **Expo** connector in claude.ai (Settings → Connectors) and ask Claude to run the build and submission steps below for you.
 

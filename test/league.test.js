@@ -277,6 +277,12 @@ test("reported messages disappear after three reports", async () => {
   assert.equal(admin.data.reportedMessages[0].reports, 3);
 });
 
+test("health check", async () => {
+  const { status, data } = await call("/api/health");
+  assert.equal(status, 200);
+  assert.deepEqual(data, { ok: true, games: "demo", ai: "demo" });
+});
+
 test("serves every page", async () => {
   for (const path of ["/", "/bots", "/leaders", "/pro", "/me", "/privacy", "/game/x", "/bot/x", "/manifest.webmanifest", "/sw.js"]) {
     assert.equal((await fetch(base + path)).status, 200, path);

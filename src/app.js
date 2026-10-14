@@ -6,6 +6,7 @@ import * as defaultAi from "./ai.js";
 import { BotRulesSchema, TEMPLATES, sanitizeRules } from "./bots.js";
 import { DAILY_BONUS, GameError, REACTIONS, START_COINS } from "./league.js";
 import { isExpoToken } from "./push.js";
+import { tokensMatch } from "./store.js";
 import { SPORTS, SPORT_KEYS } from "./sports/teams.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -98,6 +99,11 @@ export function createApp({ league, sports, ai = defaultAi, store, limits = {}, 
       : null;
 
   // ---------- Config ----------
+
+  // Used by hosts (Render, Docker) to check the server is up.
+  app.get("/api/health", (req, res) => {
+    res.json({ ok: true, games: sports.source, ai: ai.aiMode() });
+  });
 
   app.get("/api/config", (req, res) => {
     res.json({
@@ -319,7 +325,7 @@ export function createApp({ league, sports, ai = defaultAi, store, limits = {}, 
   });
 
   app.get("/api/admin/stats", (req, res) => {
-    if (!env.ADMIN_TOKEN || req.get("x-admin-token") !== env.ADMIN_TOKEN) throw new GameError(403, "Forbidden.");
+    if (!env.ADMIN_TOKEN || !tokensMatch(req.get("x-admin-token"), env.ADMIN_TOKEN)) throw new GameError(403, "Forbidden.");
     const fans = Object.values(store.db.fans).filter((f) => !f.sample);
     const real = new Set(fans.map((f) => f.id));
     res.json({

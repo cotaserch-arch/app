@@ -34,12 +34,23 @@ Open http://localhost:3000. It starts with sample fans and bots so the leaderboa
 
 ## Put it online
 
-Any Node host works. On [Render](https://render.com) or [Railway](https://railway.app):
+### One click (recommended)
 
-1. Connect this repo. Build `npm install`, start `npm start`.
-2. Environment: `ANTHROPIC_API_KEY`, `ADMIN_TOKEN`, `CONTACT_EMAIL`.
-3. **Attach a persistent disk** and set `DATA_FILE=/data/db.json`, or every deploy wipes everyone's coins.
-4. Add your domain. HTTPS makes the site installable from Chrome and Safari.
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/cotaserch-arch/app)
+
+1. Click the button and sign in to Render with GitHub.
+2. Paste your `ANTHROPIC_API_KEY` and `CONTACT_EMAIL` when asked. `ADMIN_TOKEN` is generated for you; find it under the service's **Environment** tab.
+3. Click **Apply**. The blueprint (`render.yaml`) sets up the server, a health check and a **1 GB persistent disk** for the database. Disks need a paid instance: the smallest ("starter") is about $7/month.
+4. Add your domain under **Settings → Custom Domains**. HTTPS makes the site installable from Chrome and Safari.
+
+### Anywhere else
+
+- **Docker:** `docker build -t clutch . && docker run -p 3000:3000 -v clutch-data:/data -e ANTHROPIC_API_KEY=... clutch`
+- **Any Node 22 host:** build `npm ci`, start `npm start`, and set `DATA_FILE` to a path on a persistent disk.
+
+> **Hosts that wipe files on restart** (like Replit's default Autoscale hosting, or Railway without a volume) will reset everyone's coins and picks. Use a persistent disk or volume.
+
+Every push runs the tests and bundles the iPhone app on GitHub Actions (`.github/workflows/ci.yml`).
 
 ## Make money with it
 
@@ -84,6 +95,7 @@ test/              npm test
 
 | Method | Path | What |
 |---|---|---|
+| GET | `/api/health` | Health check for hosts |
 | GET | `/api/config` | App settings, sports, partner, ads |
 | POST | `/api/fans` | Join with `{handle, ref?}` → `{token}` (send it as `x-fan-token`) |
 | GET / DELETE | `/api/me` | Profile, recent picks, positions, bots / delete everything |

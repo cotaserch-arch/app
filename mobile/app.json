@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Clutch",
+    "slug": "clutch",
+    "scheme": "clutch",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#05080f",
+    "ios": {
+      "bundleIdentifier": "com.yourcompany.clutch",
+      "supportsTablet": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.yourcompany.clutch",
+      "adaptiveIcon": {
+        "backgroundColor": "#05080f",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "plugins": ["expo-notifications"],
+    "extra": {
+      "appUrl": "https://YOUR-CLUTCH-DOMAIN.com",
+      "eas": {}
+    }
+  }
+}

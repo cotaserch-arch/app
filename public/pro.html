@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Pro · Botfolio</title>
-  <meta name="description" content="Botfolio Pro: more bots, instant trade alerts, deep AI reviews and private leagues.">
-  <meta name="theme-color" content="#070b16">
+  <title>Clutch Pro & Partners</title>
+  <meta name="description" content="Clutch Pro: deep AI analysis for every game, unlimited bots, no ads. Partner with Clutch to reach sports fans.">
+  <meta name="theme-color" content="#05080f">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -13,10 +13,10 @@
 </head>
 <body>
   <main class="wrap">
-    <div class="hero" style="padding-bottom:24px">
+    <div class="hero" style="text-align:center">
       <span class="eyebrow">Founder pricing · Limited spots</span>
-      <h1>Level up your <span class="grad-text">bots</span></h1>
-      <p class="lede" style="margin-bottom:0">Pro launches soon. Join the waitlist now to lock in founder pricing for life.</p>
+      <h1>Get the <span class="grad-text">edge.</span></h1>
+      <p class="muted" style="max-width:600px;margin:0 auto">Pro launches soon. Join the waitlist to lock in founder pricing for life.</p>
     </div>
 
     <div class="grid cols-3">
@@ -24,72 +24,78 @@
         <div><span class="badge">Rookie</span></div>
         <div class="amount">Free</div>
         <ul>
-          <li>Build bots with AI</li>
-          <li>1 bot in the league</li>
-          <li>1-year backtests</li>
-          <li>Bot battles &amp; badges</li>
+          <li>Daily picks vs the AI</li>
+          <li>Prediction markets & watch parties</li>
+          <li>1 betting bot</li>
+          <li>Leaderboards & badges</li>
         </ul>
-        <a class="btn ghost" href="/">Start building</a>
+        <a class="btn ghost" href="/">Play now</a>
       </div>
       <div class="card price-card featured">
         <div><span class="badge brand">⚡ Most popular</span></div>
-        <div class="amount">$9<span class="muted" style="font-size:1rem">/mo</span></div>
+        <div class="amount">$4.99<span class="muted" style="font-size:1rem">/mo</span></div>
         <ul>
-          <li>Up to 10 bots in the league</li>
-          <li>Instant alerts when your bots trade</li>
-          <li>Unlimited deep AI Coach reviews</li>
-          <li>Advanced rules and more coins</li>
+          <li>Full AI breakdown for every game</li>
+          <li>AI live commentary in every room</li>
+          <li>10 betting bots + 90-day backtests</li>
+          <li>Private leagues with friends</li>
           <li>No ads</li>
         </ul>
         <button class="btn" data-plan="pro">Join the Pro waitlist</button>
       </div>
       <div class="card price-card">
-        <div><span class="badge">🐋 Whale</span></div>
-        <div class="amount">$29<span class="muted" style="font-size:1rem">/mo</span></div>
+        <div><span class="badge">🏟️ Leagues</span></div>
+        <div class="amount">$49<span class="muted" style="font-size:1rem">/season</span></div>
         <ul>
-          <li>Everything in Pro</li>
-          <li>Private leagues with friends</li>
-          <li>Unlimited bots</li>
-          <li>Strategy marketplace: sell your bot's rules</li>
-          <li>Early access to new features</li>
+          <li>Branded league for your office, bar or fan club</li>
+          <li>Up to 200 members</li>
+          <li>Custom prizes & weekly recaps</li>
+          <li>Group watch parties</li>
         </ul>
-        <button class="btn ghost" data-plan="whale">Join the Whale waitlist</button>
+        <button class="btn ghost" data-plan="pro">Join the waitlist</button>
       </div>
     </div>
 
-    <form class="card hidden" id="waitlist" style="max-width:520px;margin:24px auto 0">
+    <form class="card hidden" id="waitlist" style="max-width:520px;margin:22px auto 0">
       <h3 id="wl-title">Join the waitlist</h3>
       <label for="email">Email</label>
       <input id="email" type="email" required maxlength="120" placeholder="you@example.com" autocomplete="email">
-      <button class="btn" type="submit" style="width:100%;margin-top:12px" id="wl-btn">Lock in founder pricing</button>
+      <button class="btn block" type="submit" style="margin-top:12px" id="wl-btn">Count me in</button>
       <div class="error" id="wl-err" role="alert"></div>
     </form>
 
-    <section id="sponsor">
-      <div class="cta-band">
-        <div>
-          <h2>Sponsor a season 📣</h2>
-          <p>Exchanges, wallets and crypto apps: put your brand on the league, fund prize pools, and reach engaged traders daily.</p>
-        </div>
-        <button class="btn lg" data-plan="sponsor">Get the media kit</button>
+    <section id="partners">
+      <div class="section-head"><h2>Partner with Clutch</h2></div>
+      <div class="grid cols-3">
+        <div class="card"><h3>🎯 Sportsbooks</h3><p class="muted">Reach fans who already make picks every day, in legal markets only, with responsible-gaming messaging built in.</p><button class="btn ghost sm" data-plan="partner">Partner inquiry</button></div>
+        <div class="card"><h3>📣 Brands</h3><p class="muted">Sponsor a season, a weekly pick'em with prizes, or every watch party for your team's games.</p><button class="btn ghost sm" data-plan="sponsor">Sponsorship kit</button></div>
+        <div class="card"><h3>📺 Creators</h3><p class="muted">Run your own branded league and watch party for your audience, with a revenue share.</p><button class="btn ghost sm" data-plan="partner">Creator program</button></div>
       </div>
     </section>
 
     <section>
       <div class="section-head"><h2>FAQ</h2></div>
       <div class="grid cols-2">
-        <div class="card"><h3>Is this real money?</h3><p class="muted" style="margin:0">No. Every bot trades paper money on real (or simulated) prices. Nobody can lose or win real funds on Botfolio.</p></div>
-        <div class="card"><h3>Is this financial advice?</h3><p class="muted" style="margin:0">No. Botfolio is a game and a learning tool. Past results and backtests don't predict the future.</p></div>
-        <div class="card"><h3>Can I change my bot's rules?</h3><p class="muted" style="margin:0">Rules lock when a bot enters the league, so nobody can cheat with hindsight. Clone it to try a new version.</p></div>
-        <div class="card"><h3>Where do prices come from?</h3><p class="muted" style="margin:0">Daily prices from Coinbase's public market data, refreshed every 30 minutes. If that feed is ever unavailable, the app runs on a clearly labeled simulated market.</p></div>
+        <div class="card"><h3>Is this gambling?</h3><p class="muted" style="margin:0">No. Clutch is free to play. Coins can't be bought, sold or cashed out, and you can't win money on Clutch.</p></div>
+        <div class="card"><h3>Who is "the Bot"?</h3><p class="muted" style="margin:0">Our AI analyst. It locks in its pick for every game before kickoff, and everyone can see its record.</p></div>
+        <div class="card"><h3>Where do games come from?</h3><p class="muted" style="margin:0">Live schedules, scores and lines for the NFL, NBA, MLB, NHL and Premier League. When live data is unavailable, a clearly labeled demo league with fictional teams takes over.</p></div>
+        <div class="card"><h3>How do bots bet?</h3><p class="muted" style="margin:0">Bots risk play coins at the closing line on every game that matches their rules. Rules lock when a bot enters, so the record can't be gamed.</p></div>
       </div>
     </section>
   </main>
   <script type="module">
-    import { $, api, renderShell, setBusy } from "/js/common.js";
+    import { $, api, config, renderShell, setBusy } from "/js/common.js";
     renderShell("pro");
+    // App stores require subscriptions to go through their own billing, so the
+    // app shows Pro as "coming soon" without prices or partner offers.
+    config().then((c) => {
+      if (!c.inApp) return;
+      document.querySelectorAll(".price-card .amount").forEach((el, i) => (el.textContent = i === 0 ? "Free" : "Coming soon"));
+      document.querySelectorAll('.price-card [data-plan]').forEach((el) => (el.textContent = "Notify me"));
+      $("partners").remove();
+    });
     let plan = "pro";
-    const titles = { pro: "Join the Pro waitlist", whale: "Join the Whale waitlist", sponsor: "Get the sponsor media kit" };
+    const titles = { pro: "Join the Pro waitlist", partner: "Partner inquiry", sponsor: "Get the sponsorship kit" };
     document.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-plan]");
       if (!btn) return;
@@ -97,8 +103,7 @@
       $("wl-title").textContent = titles[plan];
       const form = $("waitlist");
       form.classList.remove("hidden");
-      if (plan === "sponsor") $("sponsor").before(form);
-      else document.querySelector(".grid.cols-3").after(form);
+      btn.closest("section, .grid").after(form);
       form.scrollIntoView({ behavior: "smooth", block: "center" });
       $("email").focus({ preventScroll: true });
     });
@@ -109,7 +114,7 @@
       setBusy(btn, true, "Saving…");
       try {
         await api("/api/waitlist", { method: "POST", body: { email: $("email").value, plan } });
-        $("waitlist").innerHTML = `<h3>🎉 You're on the list</h3><p class="muted" style="margin:0">We'll email you when ${plan === "sponsor" ? "the media kit is ready" : "it launches"}, with founder pricing locked in.</p>`;
+        $("waitlist").innerHTML = `<h3>🎉 You're on the list</h3><p class="muted" style="margin:0">We'll be in touch soon${plan === "pro" ? ", with founder pricing locked in" : ""}.</p>`;
       } catch (err) {
         $("wl-err").textContent = err.message;
         setBusy(btn, false);

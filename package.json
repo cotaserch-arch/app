@@ -1,7 +1,7 @@
 {
-  "name": "botfolio",
+  "name": "clutch",
   "version": "0.1.0",
-  "description": "Botfolio - build an AI crypto trading bot in one sentence and battle it in a live paper-trading league.",
+  "description": "Clutch - the AI sports app: beat the AI at picks, trade predictions, build betting bots and join live watch parties.",
   "type": "module",
   "main": "src/server.js",
   "scripts": {

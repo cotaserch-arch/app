@@ -2,40 +2,34 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import { z } from "zod";
-import { describeStrategy } from "../public/js/describe.js";
 import * as defaultAi from "./ai.js";
-import { badgesFor } from "./badges.js";
-import { downsample, simulate } from "./engine.js";
-import { ticker } from "./market.js";
-import { ASSETS, ASSET_NAMES, StrategySchema, TEMPLATES, sanitizeStrategy } from "./strategy.js";
+import { BotRulesSchema, TEMPLATES, sanitizeRules } from "./bots.js";
+import { DAILY_BONUS, GameError, REACTIONS, START_COINS } from "./league.js";
+import { isExpoToken } from "./push.js";
+import { SPORTS, SPORT_KEYS } from "./sports/teams.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(here, "..", "public");
+export const APP_NAME = "Clutch";
 
-const TextInput = z.object({ text: z.string().trim().min(8, "Describe your strategy in a sentence or two.").max(1500) });
-const StrategyInput = z.object({ strategy: StrategySchema, days: z.coerce.number().int().min(30).max(365).default(365) });
-const BotInput = z.object({
-  name: z.string().trim().min(2, "Give your bot a name.").max(40),
-  creator: z.string().trim().min(2, "Pick a trader name.").max(24).regex(/^[\w.-]+$/, "Trader names can use letters, numbers, dots, dashes and underscores."),
-  prompt: z.string().trim().max(1500).default(""),
-  strategy: StrategySchema,
-  clonedFrom: z.string().max(20).nullable().optional(),
+const FanInput = z.object({ handle: z.string().trim().max(20), ref: z.string().max(20).nullable().optional() });
+const TextInput = z.object({ text: z.string().trim().min(8, "Describe your bot in a sentence or two.").max(600) });
+const BacktestInput = z.object({ rules: BotRulesSchema, days: z.coerce.number().int().min(7).max(40).default(30) });
+const BotInput = z.object({ name: z.string().trim().min(2, "Give your bot a name.").max(40), prompt: z.string().trim().max(600).default(""), rules: BotRulesSchema });
+const TradeInput = z.object({
+  action: z.enum(["buy", "sell"]),
+  outcome: z.enum(["yes", "no"]),
+  coins: z.coerce.number().optional(),
+  shares: z.coerce.number().optional(),
 });
 const WaitlistInput = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email.").max(120),
-  plan: z.enum(["pro", "whale", "sponsor"]).default("pro"),
+  plan: z.enum(["pro", "partner", "sponsor"]).default("pro"),
 });
-
-class HttpError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
 
 function parse(schema, body) {
   const result = schema.safeParse(body ?? {});
-  if (!result.success) throw new HttpError(400, result.error.issues[0]?.message || "Invalid input.");
+  if (!result.success) throw new GameError(400, result.error.issues[0]?.message || "Invalid input.");
   return result.data;
 }
 
@@ -52,240 +46,306 @@ function rateLimit({ windowMs, max }) {
   };
 }
 
-const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
-
-export function createApp({ store, market, ai = defaultAi, limits = {}, env = process.env }) {
+export function createApp({ league, sports, ai = defaultAi, store, limits = {}, env = process.env }) {
   const app = express();
   app.set("trust proxy", 1);
   app.disable("x-powered-by");
-  app.use(express.json({ limit: "32kb" }));
+  app.use(express.json({ limit: "16kb" }));
 
-  const aiLimit = rateLimit({ windowMs: 10 * 60_000, max: limits.ai ?? 30 });
-  const writeLimit = rateLimit({ windowMs: 10 * 60_000, max: limits.write ?? 30 });
-  const hypeSeen = new Set();
+  const joinLimit = rateLimit({ windowMs: 10 * 60_000, max: limits.join ?? 10 });
+  const aiLimit = rateLimit({ windowMs: 10 * 60_000, max: limits.ai ?? 40 });
+  const writeLimit = rateLimit({ windowMs: 10 * 60_000, max: limits.write ?? 400 });
 
-  // Live results are cached until the price data changes.
-  let cacheVersion = null;
-  const cache = new Map();
-  function liveResult(bot) {
-    const m = market.get();
-    if (cacheVersion !== m.version) {
-      cache.clear();
-      cacheVersion = m.version;
-    }
-    if (!cache.has(bot.id)) cache.set(bot.id, simulate(bot.strategy, m, { startDate: bot.joinedAt }));
-    return cache.get(bot.id);
+  const fanOf = (req) => league.fanByToken(req.get("x-fan-token"));
+  function requireFan(req) {
+    const fan = fanOf(req);
+    if (!fan) throw new GameError(401, "Pick a handle to play.");
+    return fan;
   }
-
-  const lastYear = (m) => m.dates[Math.max(0, m.dates.length - 366)];
-  const sinceDays = (m, days) => m.dates[Math.max(0, m.dates.length - 1 - days)];
-
-  function summary(bot) {
-    const live = liveResult(bot);
-    const curve = live.curve;
-    const prev = curve.at(-2)?.equity ?? live.stats.startingCash;
-    return {
-      id: bot.id,
-      name: bot.name,
-      creator: bot.creator,
-      sample: bot.sample,
-      joinedAt: bot.joinedAt,
-      createdAt: bot.createdAt,
-      daysLive: Math.max(0, daysBetween(bot.joinedAt, market.get().dates.at(-1))),
-      returnPct: live.stats.returnPct,
-      benchmarkReturnPct: live.stats.benchmarkReturnPct,
-      maxDrawdownPct: live.stats.maxDrawdownPct,
-      dayChangePct: Math.round((curve.at(-1).equity / prev - 1) * 10000) / 100,
-      spark: downsample(curve, 40).map((p) => p.equity),
-      holdings: live.openPositions.map((p) => p.asset),
-      hype: bot.hype,
-      clones: bot.clones,
-      badges: badgesFor(bot, live),
-    };
+  function loadGame(id) {
+    const game = sports.game(id);
+    if (!game) throw new GameError(404, "Game not found.");
+    return game;
   }
-
-  function rankedBots() {
-    return store
-      .bots()
-      .map(summary)
-      .sort((a, b) => b.returnPct - a.returnPct || a.joinedAt.localeCompare(b.joinedAt))
-      .map((b, i) => ({ ...b, rank: i + 1 }));
-  }
-
   function loadBot(id) {
-    const bot = store.getBot(id);
-    if (!bot) throw new HttpError(404, "Bot not found.");
+    const bot = store.db.bots[id];
+    if (!bot) throw new GameError(404, "Bot not found.");
     return bot;
   }
 
+  function botSummary(game) {
+    const p = league.preview(game);
+    return { pick: p.pick, win_probability: p.win_probability, upset_alert: p.upset_alert, headline: p.headline, source: p.source };
+  }
+
+  function gameCard(game, fan) {
+    const ml = league.markets(game).find((m) => m.kind === "ml");
+    const pick = fan ? store.db.picks[`${fan.id}:${game.id}`] : null;
+    return { ...game, bot: botSummary(game), myPick: pick?.side ?? null, homeWinPrice: ml?.price ?? null };
+  }
+
+  // The iPhone/Android app identifies itself in its user agent. App stores
+  // restrict gambling promotion and Google doesn't allow AdSense in apps, so
+  // the app gets neither.
+  const inApp = (req) => /Clutch(IOS|Android|App)/.test(req.get("user-agent") || "");
+  const partner = (req) =>
+    env.SPORTSBOOK_URL && !inApp(req)
+      ? {
+          name: env.SPORTSBOOK_NAME || "our sportsbook partner",
+          url: env.SPORTSBOOK_URL,
+          terms: env.SPORTSBOOK_TERMS || "21+ and present in a legal state. Gambling problem? Call 1-800-GAMBLER.",
+        }
+      : null;
+
+  // ---------- Config ----------
+
   app.get("/api/config", (req, res) => {
-    const m = market.get();
     res.json({
+      appName: APP_NAME,
+      contactEmail: env.CONTACT_EMAIL || null,
       aiMode: ai.aiMode(),
-      market: { source: m.source, updatedAt: m.updatedAt, lastDate: m.dates.at(-1) },
-      assets: ASSETS,
-      assetNames: ASSET_NAMES,
+      source: sports.source,
+      sports: SPORTS,
+      reactions: REACTIONS,
       templates: TEMPLATES,
+      startCoins: START_COINS,
+      dailyBonus: DAILY_BONUS,
+      partner: partner(req),
+      inApp: inApp(req),
       ads: {
-        adsenseClient: env.ADSENSE_CLIENT || null,
-        adsenseSlot: env.ADSENSE_SLOT || null,
-        sponsor: env.SPONSOR_NAME
-          ? { name: env.SPONSOR_NAME, text: env.SPONSOR_TEXT || "", url: env.SPONSOR_URL || "#" }
-          : null,
+        adsenseClient: inApp(req) ? null : env.ADSENSE_CLIENT || null,
+        adsenseSlot: inApp(req) ? null : env.ADSENSE_SLOT || null,
+        sponsor: env.SPONSOR_NAME ? { name: env.SPONSOR_NAME, text: env.SPONSOR_TEXT || "", url: env.SPONSOR_URL || "#" } : null,
       },
     });
   });
 
-  app.get("/api/market", (req, res) => {
-    const m = market.get();
-    res.json({ source: m.source, updatedAt: m.updatedAt, ticker: ticker(m) });
+  // ---------- Fans ----------
+
+  app.post("/api/fans", joinLimit, (req, res) => {
+    const input = parse(FanInput, req.body);
+    const fan = league.createFan({ handle: input.handle, ref: input.ref });
+    res.status(201).json({ token: fan.token, profile: league.profile(fan) });
   });
 
-  app.post("/api/strategies/compile", aiLimit, async (req, res) => {
-    const { text } = parse(TextInput, req.body);
-    res.json(await ai.compileStrategy(text));
+  app.get("/api/me", (req, res) => {
+    const fan = requireFan(req);
+    const profile = league.profile(fan);
+    const since = new Date(Date.now() - 3 * 86_400_000).toISOString();
+    const picks = Object.values(store.db.picks)
+      .filter((p) => p.fanId === fan.id)
+      .map((p) => ({ ...p, game: sports.game(p.gameId) }))
+      .filter((p) => p.game && p.game.startsAt >= since)
+      .map((p) => ({
+        gameId: p.gameId,
+        side: p.side,
+        result: p.result,
+        botPick: p.botPick ?? league.botPick(p.game),
+        botWon: p.botWon ?? null,
+        startsAt: p.game.startsAt,
+        matchup: `${p.game.away.short} @ ${p.game.home.short}`,
+      }))
+      .sort((a, b) => b.startsAt.localeCompare(a.startsAt));
+    const positions = Object.values(store.db.positions)
+      .filter((p) => p.fanId === fan.id && p.shares > 0.0001)
+      .slice(-30)
+      .map((p) => {
+        const g = sports.game(p.gameId);
+        return {
+          marketId: p.marketId,
+          gameId: p.gameId,
+          outcome: p.outcome,
+          shares: Math.round(p.shares * 100) / 100,
+          cost: Math.round(p.cost),
+          settled: p.settled,
+          payout: p.payout ?? null,
+          matchup: g ? `${g.away.short} @ ${g.home.short}` : p.gameId,
+          status: g?.status ?? "final",
+        };
+      })
+      .reverse();
+    const bots = Object.values(store.db.bots)
+      .filter((b) => b.ownerId === fan.id)
+      .map((b) => ({ id: b.id, name: b.name, stats: league.botResult(b).stats }));
+    res.json({ profile, token: fan.token, picks, positions, bots });
   });
 
-  app.post("/api/strategies/backtest", (req, res) => {
-    const input = parse(StrategyInput, req.body);
-    const strategy = sanitizeStrategy(input.strategy);
-    const m = market.get();
-    const result = simulate(strategy, m, { startDate: sinceDays(m, input.days) });
-    res.json({
-      strategy,
-      rules: describeStrategy(strategy, ASSETS.length),
-      market: { source: m.source },
-      result: { ...result, trades: result.trades.slice(-40) },
+  app.delete("/api/me", writeLimit, (req, res) => {
+    league.deleteFan(requireFan(req));
+    res.json({ ok: true });
+  });
+
+  app.post("/api/me/push", writeLimit, (req, res) => {
+    const fan = requireFan(req);
+    const pushToken = req.body?.token;
+    if (pushToken !== null && !isExpoToken(pushToken)) throw new GameError(400, "Invalid push token.");
+    league.setPushToken(fan, pushToken);
+    res.json({ ok: true });
+  });
+
+  app.post("/api/me/daily", writeLimit, (req, res) => {
+    res.json(league.claimDaily(requireFan(req)));
+  });
+
+  // ---------- Games ----------
+
+  app.get("/api/games", (req, res) => {
+    const fan = fanOf(req);
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? req.query.date : new Date().toISOString().slice(0, 10);
+    const tz = Math.max(-840, Math.min(840, Number(req.query.tz) || 0));
+    const from = Date.parse(`${date}T00:00:00Z`) + tz * 60_000;
+    const to = from + 86_400_000;
+    const sport = SPORT_KEYS.includes(req.query.sport) ? req.query.sport : null;
+    league.gradePicks();
+    league.warmPreviews();
+    const games = sports
+      .games()
+      .filter((g) => {
+        const t = Date.parse(g.startsAt);
+        return t >= from && t < to && (!sport || g.sport === sport);
+      })
+      .map((g) => gameCard(g, fan));
+    res.json({ games, source: sports.source, botRecord: league.botRecord(7) });
+  });
+
+  app.get("/api/games/:id", aiLimit, async (req, res) => {
+    const game = loadGame(req.params.id);
+    const fan = fanOf(req);
+    let timer;
+    const timeout = new Promise((resolve) => {
+      timer = setTimeout(() => resolve(null), 20_000);
     });
+    const preview = (await Promise.race([league.ensurePreview(game), timeout])) ?? league.preview(game);
+    clearTimeout(timer);
+    const pick = fan ? store.db.picks[`${fan.id}:${game.id}`] : null;
+    res.json({ game, preview, markets: league.markets(game, fan), myPick: pick?.side ?? null, coins: fan ? Math.floor(fan.coins) : null, partner: partner(req) });
   });
 
-  app.post("/api/strategies/coach", aiLimit, async (req, res) => {
-    const { strategy: raw } = parse(StrategyInput, req.body);
-    const strategy = sanitizeStrategy(raw);
-    const m = market.get();
-    const result = simulate(strategy, m, { startDate: lastYear(m) });
-    res.json({ coach: await ai.coachStrategy(strategy, result) });
+  app.post("/api/games/:id/pick", writeLimit, (req, res) => {
+    const fan = requireFan(req);
+    const game = loadGame(req.params.id);
+    league.makePick(fan, game, req.body?.side);
+    res.json({ myPick: req.body.side, bot: botSummary(game) });
+  });
+
+  app.post("/api/markets/:id/trade", writeLimit, (req, res) => {
+    const fan = requireFan(req);
+    res.json(league.trade(fan, req.params.id, parse(TradeInput, req.body)));
+  });
+
+  // ---------- Watch party ----------
+
+  app.get("/api/games/:id/room", (req, res) => {
+    const game = loadGame(req.params.id);
+    const fan = fanOf(req);
+    const room = league.room(game, { since: Number(req.query.since) || 0, viewerKey: fan?.id ?? req.ip });
+    res.json({ game, ...room });
+  });
+
+  app.post("/api/games/:id/chat", writeLimit, (req, res) => {
+    const fan = requireFan(req);
+    league.chat(fan, loadGame(req.params.id), req.body?.text);
+    res.status(201).json({ ok: true });
+  });
+
+  app.post("/api/games/:id/report", writeLimit, (req, res) => {
+    const game = loadGame(req.params.id);
+    res.json(league.report(game, req.body?.n, fanOf(req)?.id ?? req.ip));
+  });
+
+  app.post("/api/games/:id/react", writeLimit, (req, res) => {
+    const game = loadGame(req.params.id);
+    res.json({ reactions: league.react(game, req.body?.emoji, fanOf(req)?.id ?? req.ip) });
+  });
+
+  // ---------- Betting bots ----------
+
+  app.post("/api/bots/compile", aiLimit, async (req, res) => {
+    const { text } = parse(TextInput, req.body);
+    res.json(await ai.compileBot(text));
+  });
+
+  app.post("/api/bots/backtest", (req, res) => {
+    const input = parse(BacktestInput, req.body);
+    const rules = sanitizeRules(input.rules);
+    const result = league.backtest(rules, input.days);
+    res.json({ rules, days: input.days, stats: result.stats, curve: result.curve, bets: result.bets.slice(-25).reverse() });
   });
 
   app.post("/api/bots", writeLimit, (req, res) => {
+    const fan = requireFan(req);
     const input = parse(BotInput, req.body);
-    const strategy = sanitizeStrategy({ ...input.strategy, name: input.name });
-    const parent = input.clonedFrom ? store.getBot(input.clonedFrom) : null;
-    const bot = store.createBot({
-      name: input.name,
-      creator: input.creator,
-      prompt: input.prompt,
-      strategy,
-      joinedAt: market.get().dates.at(-1),
-      clonedFrom: parent?.id ?? null,
-    });
-    if (parent) store.updateBot(parent.id, (b) => ({ clones: (b.clones || 0) + 1 }));
+    const bot = league.createBot(fan, input);
     res.status(201).json({ id: bot.id });
-  });
-
-  app.get("/api/leaderboard", (req, res) => {
-    const limit = Math.min(Number(req.query.limit) || 100, 200);
-    let bots = rankedBots();
-    if (req.query.sort === "trending") bots.sort((a, b) => b.hype - a.hype || a.rank - b.rank);
-    if (req.query.sort === "new") bots.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    const all = rankedBots();
-    const veterans = all.filter((b) => b.daysLive >= 7);
-    const highlights = all.length
-      ? {
-          leader: veterans[0] ?? all[0],
-          mover: [...all].sort((a, b) => b.dayChangePct - a.dayChangePct)[0],
-          favorite: [...all].sort((a, b) => b.hype - a.hype)[0],
-        }
-      : null;
-    const m = market.get();
-    res.json({ bots: bots.slice(0, limit), total: all.length, highlights, market: { source: m.source, lastDate: m.dates.at(-1) } });
   });
 
   app.get("/api/bots/:id", (req, res) => {
     const bot = loadBot(req.params.id);
-    const m = market.get();
-    const live = liveResult(bot);
-    const backtest = simulate(bot.strategy, m, { startDate: lastYear(m) });
-    const ranked = rankedBots();
-    const rank = ranked.find((b) => b.id === bot.id)?.rank;
+    const live = league.botResult(bot);
+    const backtest = league.backtest(bot.rules, 30);
+    const rank = league.botsBoard(1000).find((b) => b.id === bot.id)?.rank ?? null;
     res.json({
-      bot: { ...summary(bot), prompt: bot.prompt, strategy: bot.strategy, clonedFrom: bot.clonedFrom ?? null, rank },
-      rules: describeStrategy(bot.strategy, ASSETS.length),
-      live: { ...live, trades: live.trades.slice(-30).reverse() },
-      backtest: { stats: backtest.stats, curve: downsample(backtest.curve, 120), benchmark: downsample(backtest.benchmark, 120) },
-      market: { source: m.source },
-      total: ranked.length,
+      bot: { id: bot.id, name: bot.name, creator: bot.creator, prompt: bot.prompt, rules: bot.rules, createdAt: bot.createdAt, hype: bot.hype, sample: bot.sample, rank },
+      live: { stats: live.stats, curve: live.curve, bets: live.bets.slice(-25).reverse() },
+      backtest: { stats: backtest.stats, curve: backtest.curve },
     });
   });
 
   app.post("/api/bots/:id/hype", writeLimit, (req, res) => {
     const bot = loadBot(req.params.id);
-    const key = `${req.ip}:${bot.id}:${new Date().toISOString().slice(0, 10)}`;
-    if (hypeSeen.has(key)) return res.json({ hype: bot.hype, already: true });
-    hypeSeen.add(key);
-    if (hypeSeen.size > 100_000) hypeSeen.clear();
-    const updated = store.updateBot(bot.id, (b) => ({ hype: (b.hype || 0) + 1 }));
-    res.json({ hype: updated.hype });
+    bot.hype = (bot.hype || 0) + 1;
+    store.save();
+    res.json({ hype: bot.hype });
   });
 
-  app.get("/api/battle", (req, res) => {
-    const a = loadBot(String(req.query.a || ""));
-    const b = loadBot(String(req.query.b || ""));
-    if (a.id === b.id) throw new HttpError(400, "Pick two different bots.");
-    const days = [30, 90, 365].includes(Number(req.query.days)) ? Number(req.query.days) : 90;
-    const m = market.get();
-    const startDate = sinceDays(m, days);
-    let benchmark = [];
-    const fighters = [a, b].map((bot) => {
-      const r = simulate(bot.strategy, m, { startDate });
-      benchmark = r.benchmark;
-      return {
-        id: bot.id,
-        name: bot.name,
-        creator: bot.creator,
-        sample: bot.sample,
-        stats: r.stats,
-        curve: downsample(r.curve, 120),
-        rules: describeStrategy(bot.strategy, ASSETS.length),
-      };
-    });
-    const [fa, fb] = fighters;
-    const winner = fa.stats.returnPct === fb.stats.returnPct ? null : fa.stats.returnPct > fb.stats.returnPct ? fa.id : fb.id;
-    res.json({ days, startDate, fighters, benchmark: downsample(benchmark, 120), winner, market: { source: m.source } });
+  // ---------- Leaderboards ----------
+
+  app.get("/api/leaderboard", (req, res) => {
+    const board = ["pickers", "traders", "bots"].includes(req.query.board) ? req.query.board : "pickers";
+    const limit = Math.min(Number(req.query.limit) || 50, 100);
+    const rows = board === "pickers" ? league.pickers(limit) : board === "traders" ? league.traders(limit) : league.botsBoard(limit);
+    res.json({ board, rows, botRecord: league.botRecord(7) });
   });
+
+  // ---------- Money ----------
 
   app.post("/api/waitlist", writeLimit, (req, res) => {
     const input = parse(WaitlistInput, req.body);
-    store.addToWaitlist(input);
+    const existing = store.db.waitlist.find((w) => w.email === input.email);
+    if (existing) Object.assign(existing, input);
+    else store.db.waitlist.push({ ...input, createdAt: new Date().toISOString() });
+    store.save();
     res.status(201).json({ ok: true });
   });
 
   app.get("/api/admin/stats", (req, res) => {
-    if (!env.ADMIN_TOKEN || req.get("x-admin-token") !== env.ADMIN_TOKEN) throw new HttpError(403, "Forbidden.");
-    const bots = store.bots();
+    if (!env.ADMIN_TOKEN || req.get("x-admin-token") !== env.ADMIN_TOKEN) throw new GameError(403, "Forbidden.");
+    const fans = Object.values(store.db.fans).filter((f) => !f.sample);
+    const real = new Set(fans.map((f) => f.id));
     res.json({
-      bots: bots.length,
-      realBots: bots.filter((b) => !b.sample).length,
-      totalHype: bots.reduce((n, b) => n + (b.hype || 0), 0),
-      waitlist: store.waitlist(),
+      fans: fans.length,
+      picks: Object.values(store.db.picks).filter((p) => real.has(p.fanId)).length,
+      bots: Object.values(store.db.bots).filter((b) => !b.sample).length,
+      trades: fans.reduce((n, f) => n + f.trades, 0),
+      reportedMessages: Object.values(store.db.messages).flat().filter((m) => m.reports?.length).map(({ handle, text, reports, hidden }) => ({ handle, text, reports: reports.length, hidden: !!hidden })),
+      waitlist: store.db.waitlist,
     });
   });
 
   app.use("/api", (req, res) => res.status(404).json({ error: "Not found." }));
 
-  // AdSense verifies publishers through /ads.txt.
   app.get("/ads.txt", (req, res) => {
     if (!env.ADSENSE_CLIENT) return res.status(404).type("text").send("");
-    const pub = env.ADSENSE_CLIENT.replace(/^ca-/, "");
-    res.type("text").send(`google.com, ${pub}, DIRECT, f08c47fec0942fa0\n`);
+    res.type("text").send(`google.com, ${env.ADSENSE_CLIENT.replace(/^ca-/, "")}, DIRECT, f08c47fec0942fa0\n`);
   });
 
+  app.get("/game/:id", (req, res) => res.sendFile(path.join(publicDir, "game.html")));
   app.get("/bot/:id", (req, res) => res.sendFile(path.join(publicDir, "bot.html")));
   app.use(express.static(publicDir, { extensions: ["html"] }));
 
   app.use((err, req, res, next) => {
-    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
-    if (err instanceof z.ZodError) return res.status(400).json({ error: err.issues[0]?.message || "Invalid strategy." });
+    if (err instanceof GameError) return res.status(err.status).json({ error: err.message });
+    if (err instanceof z.ZodError) return res.status(400).json({ error: err.issues[0]?.message || "Invalid input." });
     if (err.type === "entity.parse.failed") return res.status(400).json({ error: "Invalid JSON." });
     if (err.type === "entity.too.large") return res.status(413).json({ error: "Request is too large." });
     console.error(err);

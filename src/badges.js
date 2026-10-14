@@ -1,19 +1,15 @@
-// Achievements a bot earns from its live league record.
-export function badgesFor(bot, live) {
-  const s = live.stats;
+// Achievements fans earn from their record.
+export function fanBadges(fan, stats, netWorth) {
   const badges = [];
   const add = (icon, name, why) => badges.push({ icon, name, why });
-
-  if (s.days < 7) add("🐣", "Rookie", "Less than a week in the league");
-  if (s.days >= 7 && s.returnPct > s.benchmarkReturnPct) add("🏆", "Bitcoin Beater", "Outperforming Bitcoin since joining");
-  if (s.returnPct >= 25) add("🚀", "Moonshot", "Up 25% or more");
-  if (s.finalEquity >= 2 * s.startingCash) add("🐋", "Whale", "Doubled its money");
-  if (s.closedTrades >= 5 && s.winRatePct >= 60) add("🎯", "Sniper", "60%+ of closed trades won");
-  if (s.days >= 14 && s.maxDrawdownPct < 10) add("🧊", "Iron Stomach", "Never fell more than 10% from its peak");
-  if (s.buys >= 30) add("⚡", "Hyperactive", "30+ trades");
-  const st = bot.strategy;
-  if (!st.exit.length && st.stop_loss_pct == null && st.take_profit_pct == null) add("💎", "Diamond Hands", "Never sells");
-  if (bot.hype >= 25) add("🔥", "Crowd Favorite", "25+ hype from the community");
-  if (bot.clones >= 3) add("🧬", "Trendsetter", "Cloned by 3+ traders");
+  if (stats.graded < 3) add("🐣", "Rookie", "Fewer than 3 graded picks");
+  if (stats.streak >= 5) add("🔥", "Hot Streak", `${stats.streak} correct picks in a row`);
+  if (stats.beatBotDays >= 1) add("🤖", "Bot Slayer", "Beat the AI on a day with 3+ picks");
+  if (stats.graded >= 20 && stats.accuracy >= 65) add("🎯", "Oracle", "65%+ accuracy over 20+ picks");
+  if (stats.upsets >= 3) add("💥", "Upset Caller", "Called 3+ underdog wins");
+  if (netWorth >= 5000) add("🐋", "Whale", "5,000+ coin net worth");
+  if (fan.trades >= 10) add("📈", "Trader", "10+ market trades");
+  if (fan.referrals >= 3) add("🤝", "Recruiter", "Brought in 3+ fans");
+  if (fan.chatCount >= 25) add("🗣️", "Hype Man", "25+ watch-party messages");
   return badges;
 }

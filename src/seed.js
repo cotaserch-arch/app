@@ -1,83 +1,60 @@
-// Sample bots so a fresh league isn't empty. Every one is flagged `sample: true`
-// and labeled "Sample" in the app.
-import crypto from "node:crypto";
-import { sanitizeStrategy } from "./strategy.js";
+// Sample fans and bots so a fresh install has a living leaderboard. Every one
+// is flagged `sample: true` and labeled "Sample" in the app.
+import { rng } from "./sports/demo.js";
+import { winProbs } from "./offline.js";
+import { SPORT_KEYS } from "./sports/teams.js";
 
-const daysAgo = (n) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
-const c = (indicator, period, op, value, period2 = null) => ({ indicator, period, period2, op, value });
-const ALL = ["BTC", "ETH", "SOL", "XRP", "DOGE", "ADA", "AVAX", "LINK", "LTC", "DOT"];
-
-const SAMPLES = [
-  {
-    creator: "quantqueen",
-    joined: 90,
-    hype: 41,
-    prompt: "Every day hold the 3 best performing coins over the last 30 days, as long as they're up. Sell a coin when its 30-day gain turns negative or it loses 12%.",
-    strategy: { name: "Momentum Machine", summary: "Rides the 3 hottest coins of the month.", assets: ALL, entry: [c("change_pct", 30, "above", 0)], exit: [c("change_pct", 30, "below", 0)], rank_by_momentum: { period: 30, top_n: 3 }, position_size_pct: 33, max_positions: 3, stop_loss_pct: 12, take_profit_pct: null },
-  },
-  {
-    creator: "dipdiva",
-    joined: 75,
-    hype: 23,
-    prompt: "Buy Bitcoin or Ethereum when it drops more than 10% in a week. Sell when it's up 15% or if it falls another 10%.",
-    strategy: { name: "Dip Hunter", summary: "Buys sharp weekly dips in the majors.", assets: ["BTC", "ETH"], entry: [c("change_pct", 7, "below", -10)], exit: [], rank_by_momentum: null, position_size_pct: 50, max_positions: 2, stop_loss_pct: 10, take_profit_pct: 15 },
-  },
-  {
-    creator: "satoshi_fan",
-    joined: 60,
-    hype: 58,
-    prompt: "Buy and hold Bitcoin and Ethereum forever. Never sell.",
-    strategy: { name: "Diamond Hands", summary: "Buys Bitcoin and Ethereum and never sells.", assets: ["BTC", "ETH"], entry: [], exit: [], rank_by_momentum: null, position_size_pct: 50, max_positions: 2, stop_loss_pct: null, take_profit_pct: null },
-  },
-  {
-    creator: "trendy_tom",
-    joined: 45,
-    hype: 12,
-    prompt: "Buy any coin trading above its 50-day moving average and sell when it falls below it. Put 20% in each coin.",
-    strategy: { name: "Trend Rider", summary: "Owns whatever is trending above its 50-day average.", assets: ALL, entry: [c("price_vs_sma", 50, "above", 0)], exit: [c("price_vs_sma", 50, "below", 0)], rank_by_momentum: null, position_size_pct: 20, max_positions: 5, stop_loss_pct: null, take_profit_pct: null },
-  },
-  {
-    creator: "rsi_ronin",
-    joined: 30,
-    hype: 17,
-    prompt: "Buy Solana, Ethereum or Avalanche when RSI drops below 30 and sell when RSI goes above 65.",
-    strategy: { name: "RSI Sniper", summary: "Snipes oversold alts and sells into strength.", assets: ["SOL", "ETH", "AVAX"], entry: [c("rsi", 14, "below", 30)], exit: [c("rsi", 14, "above", 65)], rank_by_momentum: null, position_size_pct: 33, max_positions: 3, stop_loss_pct: null, take_profit_pct: null },
-  },
-  {
-    creator: "moonboy",
-    joined: 21,
-    hype: 34,
-    prompt: "Buy Dogecoin or Solana when they pump more than 8% in a day. Take profit at 20%, stop loss 7%.",
-    strategy: { name: "Rocket Chaser", summary: "Jumps on big daily pumps with tight risk limits.", assets: ["DOGE", "SOL"], entry: [c("change_pct", 1, "above", 8)], exit: [], rank_by_momentum: null, position_size_pct: 50, max_positions: 2, stop_loss_pct: 7, take_profit_pct: 20 },
-  },
-  {
-    creator: "ma_cross_max",
-    joined: 14,
-    hype: 6,
-    prompt: "Buy Bitcoin when the 20-day average crosses above the 100-day average, sell when it crosses back below. Stop loss 8%.",
-    strategy: { name: "Cross Fire", summary: "Classic moving-average crossover on Bitcoin.", assets: ["BTC"], entry: [c("sma_cross", 20, "above", 0, 100)], exit: [c("sma_cross", 20, "below", 0, 100)], rank_by_momentum: null, position_size_pct: 100, max_positions: 1, stop_loss_pct: 8, take_profit_pct: null },
-  },
-  {
-    creator: "bottomfeeder",
-    joined: 7,
-    hype: 3,
-    prompt: "Buy any coin that is 30% below its 90-day high, take profit at 25%.",
-    strategy: { name: "Bottom Fisher", summary: "Buys coins that have crashed far from their highs.", assets: ALL, entry: [c("drawdown_from_high", 90, "above", 30)], exit: [], rank_by_momentum: null, position_size_pct: 20, max_positions: 5, stop_loss_pct: null, take_profit_pct: 25 },
-  },
+const FANS = [
+  { handle: "chalk_charlie", style: "favorite", rate: 0.5 },
+  { handle: "dogwalker", style: "underdog", rate: 0.35 },
+  { handle: "homer_simpsonn", style: "home", rate: 0.45 },
+  { handle: "stat_queen", style: "smart", rate: 0.6 },
+  { handle: "vibes_only", style: "random", rate: 0.4 },
+  { handle: "ai_truther", style: "bot", rate: 0.55 },
 ];
 
-export function sampleBots() {
-  return SAMPLES.map((s) => ({
-    id: crypto.randomBytes(6).toString("base64url"),
-    createdAt: new Date(Date.now() - s.joined * 86_400_000).toISOString(),
-    joinedAt: daysAgo(s.joined),
-    sample: true,
-    name: s.strategy.name,
-    creator: s.creator,
-    prompt: s.prompt,
-    strategy: sanitizeStrategy(s.strategy),
-    hype: s.hype,
-    clones: 0,
-    clonedFrom: null,
-  }));
+const BOTS = [
+  { fan: 0, name: "Chalk Eater", prompt: "Only bet favorites with at least a 60% chance to win.", rules: { sports: SPORT_KEYS, pick: "favorite", min_prob: 60, max_prob: null, stake: 100 } },
+  { fan: 1, name: "Dog Pound", prompt: "Bet every underdog with at least a 35% chance, 100 coins a game.", rules: { sports: SPORT_KEYS, pick: "underdog", min_prob: 35, max_prob: null, stake: 100 } },
+  { fan: 2, name: "Home Cookin'", prompt: "Always bet the home team in basketball and hockey.", rules: { sports: ["basketball", "hockey"], pick: "home", min_prob: null, max_prob: null, stake: 100 } },
+  { fan: 5, name: "AI Disciple", prompt: "Back whatever the AI picks in every sport.", rules: { sports: SPORT_KEYS, pick: "ai_pick", min_prob: null, max_prob: null, stake: 100 } },
+  { fan: 4, name: "The Contrarian", prompt: "Bet against the AI's pick every single game.", rules: { sports: SPORT_KEYS, pick: "fade_ai", min_prob: null, max_prob: null, stake: 100 } },
+];
+
+export function seedSamples(league, { store, sports, now = Date.now() }) {
+  const since = new Date(now - 21 * 86_400_000).toISOString();
+  const finals = sports.games().filter((g) => g.status === "final" && g.startsAt >= since);
+  const fans = FANS.map((f) => league.createFan({ handle: f.handle, sample: true }));
+
+  FANS.forEach((f, i) => {
+    const fan = fans[i];
+    const rand = rng(1000 + i);
+    for (const g of finals) {
+      if (rand() > f.rate) continue;
+      const p = winProbs(g);
+      const fav = p.home >= p.away ? "home" : "away";
+      const dog = fav === "home" ? "away" : "home";
+      const side = {
+        favorite: fav,
+        underdog: dog,
+        home: "home",
+        smart: rand() < 0.8 ? fav : dog,
+        random: rand() < 0.5 ? "home" : "away",
+        bot: league.botPick(g),
+      }[f.style];
+      store.db.picks[`${fan.id}:${g.id}`] = { fanId: fan.id, gameId: g.id, side, at: new Date(Date.parse(g.startsAt) - 3_600_000).toISOString(), result: null };
+    }
+  });
+
+  for (const b of BOTS) {
+    league.createBot(fans[b.fan], {
+      name: b.name,
+      prompt: b.prompt,
+      rules: { ...b.rules, name: b.name, summary: b.prompt },
+      sample: true,
+      createdAt: since,
+    });
+  }
+  league.gradePicks();
+  store.save();
 }

@@ -3,116 +3,70 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Botfolio: build an AI trader in one sentence</title>
-  <meta name="description" content="Describe a crypto trading strategy in plain English. AI builds the bot, tests it on a year of prices, and enters it in a live league against everyone else's bots. Paper money only.">
-  <meta name="theme-color" content="#070b16">
-  <meta property="og:title" content="Botfolio: the AI trading league">
-  <meta property="og:description" content="Build an AI crypto trader in one sentence. Battle the world.">
+  <title>Clutch: beat the AI at sports</title>
+  <meta name="description" content="Free daily sports picks against an AI, a fan prediction market, betting-bot battles and live watch parties. All in one app.">
+  <meta name="theme-color" content="#05080f">
+  <meta property="og:title" content="Clutch: can you beat the AI at sports?">
+  <meta property="og:description" content="Daily picks vs the AI, a fan prediction market, betting-bot battles and live watch parties.">
+  <meta property="og:image" content="/icons/icon-512.png">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <main>
-    <div class="wrap hero">
-      <span class="eyebrow"><span class="pulse"></span>AI trading league · Season 1 live</span>
-      <h1>Build an AI trader in one sentence. <span class="grad-text">Battle the world.</span></h1>
-      <p class="lede">Describe any crypto strategy in plain English. AI turns it into a bot, tests it on a year of prices in seconds, and enters it in a live league against everyone else's. Paper money, real bragging rights.</p>
-
-      <form id="build-form" class="card glow builder" autocomplete="off">
-        <label for="idea">Your strategy, in your words</label>
-        <textarea id="idea" maxlength="1500" required placeholder="e.g. Buy Bitcoin when it drops 10% in a week, sell when it's up 15% or falls another 10%."></textarea>
-        <div class="chips" id="templates" style="margin-top:12px"></div>
-        <div class="row" style="margin-top:14px">
-          <div class="status-line" id="mode-line"></div>
-          <button class="btn lg" type="submit" id="build-btn">Build my bot ⚡</button>
-        </div>
-        <div class="error" id="build-error" role="alert"></div>
-      </form>
+  <main class="wrap">
+    <div class="hero">
+      <span class="eyebrow">🤖 Beat the Bot · Season 1</span>
+      <h1>Think you know sports better than <span class="grad-text">the AI?</span></h1>
+      <p class="muted lede" style="max-width:640px;font-size:1.08rem">Pick today's winners. The AI makes its picks too. Beat it, climb the leaderboard, trade predictions with fans, and watch every game live together.</p>
     </div>
 
-    <div class="wrap hidden" id="result">
-      <div class="layout">
-        <div class="stack">
-          <div class="card">
-            <div class="row">
-              <div>
-                <div class="muted small">Your bot</div>
-                <h2 id="r-name" style="margin:2px 0 4px;font-size:1.9rem"></h2>
-                <div class="muted" id="r-summary"></div>
-              </div>
-              <span class="badge" id="r-window"></span>
-            </div>
-            <div id="r-notes" style="margin-top:12px"></div>
-            <div class="grid cols-5" id="r-stats" style="margin:18px 0"></div>
-            <div id="r-chart"></div>
-          </div>
-          <div class="card" id="r-coach"><div class="skeleton" style="height:90px"></div></div>
+    <div class="card glow" style="margin-bottom:18px">
+      <div class="vsbot">
+        <div class="side"><div class="big" id="you-score">0</div><div class="who">You</div></div>
+        <div class="vs">VS</div>
+        <div class="side"><div class="big" id="bot-score">0</div><div class="who">🤖 The Bot</div></div>
+        <div class="extra" style="text-align:center">
+          <div class="muted small" id="vs-note">Correct picks, last 3 days</div>
+          <button class="btn sm" id="daily-btn" style="margin-top:8px">🎁 Daily coins</button>
         </div>
-
-        <aside class="stack">
-          <div class="card rules" id="r-rules"></div>
-          <form class="card" id="enter-form" autocomplete="off">
-            <h3>Enter the league 🏁</h3>
-            <p class="muted small">Rules lock when you enter. Your bot starts with $10,000 of paper money and trades live from today.</p>
-            <div style="margin-bottom:12px">
-              <label for="bot-name">Bot name</label>
-              <input id="bot-name" maxlength="40" required>
-            </div>
-            <div style="margin-bottom:14px">
-              <label for="trader">Your trader name</label>
-              <input id="trader" maxlength="24" required placeholder="e.g. moonwalker" pattern="[A-Za-z0-9_.\-]+">
-            </div>
-            <button class="btn" type="submit" id="enter-btn" style="width:100%">Enter the league</button>
-            <button class="btn ghost" type="button" id="tweak-btn" style="width:100%;margin-top:8px">← Tweak the idea</button>
-            <div class="error" id="enter-error" role="alert"></div>
-          </form>
-        </aside>
       </div>
     </div>
 
-    <section>
-      <div class="wrap">
-        <div class="grid cols-3" id="highlights"></div>
+    <div class="row" style="margin-bottom:12px">
+      <div class="tabs" id="days">
+        <button class="tab" data-day="-1">Yesterday</button>
+        <button class="tab active" data-day="0">Today</button>
+        <button class="tab" data-day="1">Tomorrow</button>
       </div>
-    </section>
+      <span class="small muted" id="bot-record"></span>
+    </div>
+    <div class="chips" id="sports" style="margin-bottom:16px"></div>
 
-    <section style="padding-top:0">
-      <div class="wrap">
-        <div class="section-head">
-          <h2>🏆 The league</h2>
-          <a href="/league">Full standings →</a>
+    <div class="layout">
+      <div>
+        <div class="games" id="games"><div class="skeleton" style="height:220px"></div><div class="skeleton" style="height:220px"></div></div>
+      </div>
+      <aside class="stack">
+        <div class="card">
+          <div class="section-head" style="margin-bottom:8px"><h3 style="margin:0">🏆 Top pickers</h3><a class="small" href="/leaders">All →</a></div>
+          <div id="mini-board"><div class="skeleton" style="height:140px"></div></div>
         </div>
-        <div class="card" style="padding:6px" id="board"><div class="skeleton" style="height:240px;margin:16px"></div></div>
-      </div>
-    </section>
-
-    <div class="wrap"><div class="ad-slot" data-slot="home"></div></div>
-
-    <section>
-      <div class="wrap">
-        <div class="section-head"><h2>How it works</h2></div>
-        <div class="grid cols-3 steps">
-          <div class="card"><div class="n">1</div><h3>Say it</h3><p>"Buy Solana when it's oversold, sell when it pumps 20%." AI turns your words into precise trading rules.</p></div>
-          <div class="card"><div class="n">2</div><h3>Test it</h3><p>See how it would have done over the last year vs. just holding Bitcoin, and get graded by the AI coach.</p></div>
-          <div class="card"><div class="n">3</div><h3>Battle</h3><p>Enter the league, climb the leaderboard, earn badges, and challenge any bot to a head-to-head battle.</p></div>
+        <div class="card">
+          <h3>🎰 Build a betting bot</h3>
+          <p class="muted small">"Bet every home underdog in hockey." Describe it, backtest it, and let it battle other bots for the crown.</p>
+          <a class="btn block" href="/bots">Build a bot</a>
         </div>
-      </div>
-    </section>
-
-    <section>
-      <div class="wrap">
-        <div class="cta-band">
-          <div>
-            <h2>Go Pro 🚀</h2>
-            <p>Run up to 10 bots, get instant trade alerts, deep AI reviews and private leagues with friends.</p>
-          </div>
-          <a class="btn lg" href="/pro">See Pro →</a>
+        <div class="ad-slot" data-slot="sidebar"></div>
+        <div class="card">
+          <h3>🤝 Invite friends</h3>
+          <p class="muted small">You both get <b>500 coins</b> when a friend joins with your link.</p>
+          <button class="btn ghost block" id="invite-btn">Copy my invite link</button>
         </div>
-      </div>
-    </section>
+      </aside>
+    </div>
   </main>
-  <script type="module" src="/js/home.js"></script>
+  <script type="module" src="/js/today.js"></script>
 </body>
 </html>

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>My profile · Clutch</title>
+  <meta name="theme-color" content="#05080f">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="wrap">
+    <div id="signed-out" class="card empty hidden" style="margin-top:30px">
+      <h2>You're not playing yet</h2>
+      <p>Join with a handle to get 1,000 coins, or restore a profile with your fan code.</p>
+      <button class="btn" id="join">Join Clutch</button>
+    </div>
+    <div id="page" class="hidden">
+      <div class="row" style="padding:28px 0 16px;align-items:flex-end">
+        <div><div class="muted small">Your profile</div><h1 id="handle" style="font-size:clamp(2rem,5vw,3rem);margin:4px 0;font-style:italic"></h1></div>
+        <div style="text-align:right"><div class="muted small">Net worth</div><div class="num" style="font-size:2.2rem;font-weight:900;color:var(--gold)" id="worth"></div></div>
+      </div>
+      <div class="grid cols-4" id="stats" style="margin-bottom:16px"></div>
+      <div class="achievements" id="badges" style="margin-bottom:20px"></div>
+      <div class="layout">
+        <div class="stack">
+          <div class="card"><h3>Recent picks</h3><div class="table-wrap"><table class="board" id="picks"></table></div></div>
+          <div class="card"><h3>Market positions</h3><div class="table-wrap"><table class="board" id="positions"></table></div></div>
+          <div class="card"><h3>My bots</h3><div id="bots"></div></div>
+        </div>
+        <aside class="stack">
+          <div class="card">
+            <h3>🤝 Invite friends</h3>
+            <p class="small muted">You both get 500 coins. <span id="refs"></span></p>
+            <button class="btn block" id="invite">Share my invite link</button>
+          </div>
+          <div class="card">
+            <h3>🔑 Your fan code</h3>
+            <p class="small muted">Your profile lives on this device. Save this code to restore it on another phone or browser. Keep it secret: anyone with it can play as you.</p>
+            <button class="btn ghost block" id="show-code">Show my code</button>
+            <code id="code" class="hidden" style="display:block;word-break:break-all;margin-top:10px;font-size:0.85rem"></code>
+          </div>
+          <form class="card" id="restore">
+            <h3>Restore a profile</h3>
+            <input id="restore-code" placeholder="Paste a fan code" autocomplete="off">
+            <button class="btn ghost block" style="margin-top:8px" type="submit">Restore</button>
+          </form>
+          <div class="card">
+            <h3>Delete my profile</h3>
+            <p class="small muted">Permanently deletes your profile, coins, picks, trades, bots and chat messages. This can't be undone.</p>
+            <button class="btn ghost block" id="delete-btn" style="color:var(--down)">Delete my profile</button>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </main>
+  <script type="module">
+    import { $, api, badgesHtml, ensureFan, escapeHtml, me, renderShell, setToken, share, signed, toast } from "/js/common.js";
+    renderShell("");
+    const tile = (label, value) => `<div class="stat"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+    async function load() {
+      const data = await me({ refresh: true });
+      if (!data) {
+        $("signed-out").classList.remove("hidden");
+        return;
+      }
+      const { profile: p } = data;
+      $("handle").textContent = `@${p.handle}`;
+      $("worth").textContent = `🪙 ${p.netWorth.toLocaleString()}`;
+      $("stats").innerHTML = [
+        tile("Points", p.stats.points),
+        tile("Accuracy", p.stats.accuracy == null ? "–" : `${p.stats.accuracy}%`),
+        tile("You vs Bot", `${p.stats.vsBot.you}-${p.stats.vsBot.bot}`),
+        tile("Streak", `🔥 ${p.stats.streak} <span class="small muted">best ${p.stats.bestStreak}</span>`),
+      ].join("");
+      $("badges").innerHTML = badgesHtml(p.badges);
+      $("refs").textContent = p.referrals ? `${p.referrals} friend${p.referrals === 1 ? "" : "s"} joined so far.` : "";
+      $("picks").innerHTML = data.picks.length
+        ? `<thead><tr><th>Game</th><th>You</th><th>Bot</th></tr></thead><tbody>${data.picks
+            .map((x) => `<tr class="link" data-href="/game/${encodeURIComponent(x.gameId)}"><td>${escapeHtml(x.matchup)}<div class="small muted">${new Date(x.startsAt).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}</div></td><td>${x.side} ${x.result ? (x.result === "won" ? "✅" : "❌") : "⏳"}</td><td>${x.botPick} ${x.botWon == null ? "" : x.botWon ? "✅" : "❌"}</td></tr>`)
+            .join("")}</tbody>`
+        : '<tbody><tr><td class="muted"><a href="/">Make your first pick →</a></td></tr></tbody>';
+      $("positions").innerHTML = data.positions.length
+        ? `<thead><tr><th>Market</th><th class="r">Shares</th><th class="r">Result</th></tr></thead><tbody>${data.positions
+            .map((x) => `<tr class="link" data-href="/game/${encodeURIComponent(x.gameId)}#markets"><td>${escapeHtml(x.matchup)} <span class="badge">${x.marketId.endsWith("~ml") ? "Winner" : "Total"}</span></td><td class="r num">${x.shares} ${x.outcome.toUpperCase()}</td><td class="r num">${x.settled ? (x.payout > 0 ? `<span class="up">+${Math.round(x.payout)}</span>` : '<span class="down">0</span>') : x.status === "scheduled" ? "Open" : "Waiting"}</td></tr>`)
+            .join("")}</tbody>`
+        : '<tbody><tr><td class="muted">No trades yet. Open any game\'s Markets tab.</td></tr></tbody>';
+      $("bots").innerHTML = data.bots.length
+        ? data.bots.map((b) => `<div class="row" style="padding:6px 0"><a href="/bot/${encodeURIComponent(b.id)}"><b>${escapeHtml(b.name)}</b></a><span class="num ${b.stats.profit >= 0 ? "up" : "down"}">${signed(b.stats.profit)}</span></div>`).join("")
+        : '<p class="muted small" style="margin:0"><a href="/bots">Build your first betting bot →</a></p>';
+      $("code").textContent = data.token;
+      $("page").classList.remove("hidden");
+      $("invite").onclick = () => share({ title: "Clutch", text: "Think you can beat the AI at sports? Join me on Clutch and we both get 500 coins.", url: `${location.origin}/?ref=${encodeURIComponent(p.id)}` });
+    }
+    $("show-code").addEventListener("click", () => $("code").classList.toggle("hidden"));
+    $("delete-btn").addEventListener("click", async () => {
+      if (!confirm("Delete your Clutch profile and everything in it? This can't be undone.")) return;
+      try {
+        await api("/api/me", { method: "DELETE" });
+        localStorage.removeItem("clutch.token");
+        toast("Your profile was deleted.");
+        setTimeout(() => (location.href = "/"), 900);
+      } catch (err) {
+        toast(err.message);
+      }
+    });
+    $("join").addEventListener("click", async () => { if (await ensureFan()) location.reload(); });
+    document.addEventListener("click", (e) => {
+      const row = e.target.closest("tr[data-href]");
+      if (row) location.href = row.dataset.href;
+    });
+    $("restore").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const code = $("restore-code").value.trim();
+      if (!code) return;
+      const previous = localStorage.getItem("clutch.token");
+      setToken(code);
+      try {
+        await api("/api/me");
+        toast("Profile restored ✓");
+        setTimeout(() => location.reload(), 600);
+      } catch {
+        if (previous) setToken(previous); else localStorage.removeItem("clutch.token");
+        toast("That code didn't match a profile.");
+      }
+    });
+    load();
+  </script>
+</body>
+</html>

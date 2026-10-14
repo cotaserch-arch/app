@@ -1,6 +1,6 @@
 // Interactive line chart: account value over time for one or more series,
 // with direct end labels, a legend, and a hover crosshair + tooltip.
-import { escapeHtml, usd } from "./common.js";
+import { escapeHtml } from "./common.js";
 
 const NS = "http://www.w3.org/2000/svg";
 const shortDate = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
@@ -15,7 +15,9 @@ function niceTicks(min, max, count = 4) {
   return ticks;
 }
 
-export function lineChart(container, { series, height = 280, baseline = null, format = (v) => usd(v, { compact: true }) }) {
+const compact = (v) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(v);
+
+export function lineChart(container, { series, height = 280, baseline = null, format = compact, tipFormat = (v) => Math.round(v).toLocaleString() }) {
   const legend =
     series.length > 1
       ? `<div class="chart-legend">${series
@@ -37,7 +39,7 @@ export function lineChart(container, { series, height = 280, baseline = null, fo
   let lo = Math.min(...values);
   let hi = Math.max(...values);
   // Give flat lines some room so the axis labels stay distinct.
-  const minSpan = Math.abs(hi) * 0.04 || 1;
+  const minSpan = Math.max(Math.abs(hi), Math.abs(lo)) * 0.04 || 10;
   if (hi - lo < minSpan) {
     const mid = (hi + lo) / 2;
     lo = mid - minSpan / 2;
@@ -109,7 +111,7 @@ export function lineChart(container, { series, height = 280, baseline = null, fo
         c.setAttribute("visibility", "visible");
         c.setAttribute("cx", cx);
         c.setAttribute("cy", y(v));
-        rows.push(`<div><span class="swatch" style="background:${series[k].color}"></span>${escapeHtml(series[k].name)}: <b class="num">${usd(v)}</b></div>`);
+        rows.push(`<div><span class="swatch" style="background:${series[k].color}"></span>${escapeHtml(series[k].name)}: <b class="num">${escapeHtml(tipFormat(v))}</b></div>`);
       });
       tip.innerHTML = `<div class="t-date">${shortDate(dates[i])}</div>${rows.join("")}`;
       tip.classList.remove("hidden");

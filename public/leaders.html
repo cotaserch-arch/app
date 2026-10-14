@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Leaderboards · Clutch</title>
+  <meta name="theme-color" content="#05080f">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="wrap">
+    <div class="hero">
+      <span class="eyebrow">🏆 Season 1 standings</span>
+      <h1>The <span class="grad-text">Leaders</span></h1>
+      <p class="muted" id="bot-line"></p>
+    </div>
+    <div class="row" style="margin-bottom:14px">
+      <div class="tabs">
+        <button class="tab active" data-board="pickers">🎯 Pickers</button>
+        <button class="tab" data-board="traders">📈 Traders</button>
+        <button class="tab" data-board="bots">🎰 Bots</button>
+      </div>
+    </div>
+    <div class="ad-slot" data-slot="leaders" style="margin-bottom:14px"></div>
+    <div class="card" style="padding:6px" id="board"><div class="skeleton" style="height:320px;margin:14px"></div></div>
+  </main>
+  <script type="module">
+    import { $, api, badgesHtml, escapeHtml, rankLabel, renderShell, signed } from "/js/common.js";
+    renderShell("leaders");
+    const sample = (r) => (r.sample ? ' <span class="badge">Sample</span>' : "");
+    const views = {
+      pickers: (rows) => `<thead><tr><th>Rank</th><th>Fan</th><th class="r">Points</th><th class="r hide-sm">Accuracy</th><th class="r hide-sm">vs Bot</th><th class="r">Streak</th></tr></thead><tbody>${rows
+        .map((r) => `<tr><td class="rank">${rankLabel(r.rank)}</td><td><b>${escapeHtml(r.handle)}</b>${sample(r)}<div class="small">${r.badges.map((b) => b.icon).join(" ")}</div></td><td class="r num"><b>${r.stats.points}</b></td><td class="r num hide-sm">${r.stats.accuracy ?? "–"}%</td><td class="r num hide-sm ${r.stats.vsBot.you >= r.stats.vsBot.bot ? "up" : "down"}">${r.stats.vsBot.you}-${r.stats.vsBot.bot}</td><td class="r num">🔥 ${r.stats.streak}</td></tr>`)
+        .join("")}</tbody>`,
+      traders: (rows) => `<thead><tr><th>Rank</th><th>Trader</th><th class="r">Net worth</th><th class="r hide-sm">Trades</th></tr></thead><tbody>${rows
+        .map((r) => `<tr><td class="rank">${rankLabel(r.rank)}</td><td><b>${escapeHtml(r.handle)}</b>${sample(r)}</td><td class="r num"><b>🪙 ${r.netWorth.toLocaleString()}</b></td><td class="r num hide-sm">${r.trades}</td></tr>`)
+        .join("")}</tbody>`,
+      bots: (rows) => `<thead><tr><th>Rank</th><th>Bot</th><th class="r">Profit</th><th class="r hide-sm">Record</th></tr></thead><tbody>${rows
+        .map((r) => `<tr class="link" data-href="/bot/${encodeURIComponent(r.id)}"><td class="rank">${rankLabel(r.rank)}</td><td><a href="/bot/${encodeURIComponent(r.id)}"><b>${escapeHtml(r.name)}</b></a>${sample(r)}<div class="small muted">@${escapeHtml(r.creator)}</div></td><td class="r num ${r.stats.profit >= 0 ? "up" : "down"}">${r.stats.profit >= 0 ? "▲" : "▼"} ${signed(r.stats.profit)}</td><td class="r num hide-sm">${r.stats.wins}-${r.stats.losses}</td></tr>`)
+        .join("")}</tbody>`,
+    };
+    const empty = { pickers: "No graded picks yet. Make your first pick!", traders: "No trades yet. Open a game's Markets tab to trade.", bots: "No bots yet." };
+    async function load(board) {
+      const { rows, botRecord } = await api(`/api/leaderboard?board=${board}&limit=100`);
+      $("bot-line").textContent = `🤖 The Bot is ${botRecord.won}-${botRecord.lost} over the last ${botRecord.days} days. Can you do better?`;
+      $("board").innerHTML = rows.length ? `<div class="table-wrap"><table class="board">${views[board](rows)}</table></div>` : `<div class="empty">${empty[board]}</div>`;
+    }
+    document.querySelector(".tabs").addEventListener("click", (e) => {
+      const t = e.target.closest("[data-board]");
+      if (!t) return;
+      document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x === t));
+      load(t.dataset.board);
+    });
+    $("board").addEventListener("click", (e) => {
+      const row = e.target.closest("tr[data-href]");
+      if (row && !e.target.closest("a")) location.href = row.dataset.href;
+    });
+    load("pickers");
+  </script>
+</body>
+</html>

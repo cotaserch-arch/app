@@ -1,41 +1,39 @@
-// Claude-powered features: compiling a plain-English strategy into a bot, and
-// coaching a bot on its backtest. Falls back to the offline versions when no
-// API key is set or a call fails.
+// Claude-powered features: game previews (the AI's pick), turning a sentence
+// into a betting bot, and big-moment commentary. Each falls back to the
+// offline version when no API key is set or a call fails.
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
-import { describeStrategy } from "../public/js/describe.js";
-import { coachOffline, parseStrategyOffline } from "./offline.js";
-import { ASSETS, ASSET_NAMES, StrategySchema, sanitizeStrategy } from "./strategy.js";
+import { BotRulesSchema, sanitizeRules } from "./bots.js";
+import { offlinePreview, parseBotOffline } from "./offline.js";
+import { formatML } from "./odds.js";
+import { SPORTS, SPORT_KEYS } from "./sports/teams.js";
 
-const MODEL = process.env.BOTFOLIO_MODEL || "claude-opus-5-5";
+const MODEL = process.env.CLUTCH_MODEL || "claude-opus-5-5";
 
-const CoachSchema = z.object({
-  grade: z.enum(["A", "B", "C", "D", "F"]),
-  verdict: z.string().describe("One punchy sentence"),
-  strengths: z.array(z.string()).describe("Up to 3"),
-  weaknesses: z.array(z.string()).describe("Up to 3"),
-  suggestion: z.string().describe("The single most useful change to try next"),
+const PreviewSchema = z.object({
+  pick: z.enum(["home", "away"]),
+  win_probability: z.number().describe("Chance the picked team wins, 50-99"),
+  headline: z.string().describe("Punchy 3-7 word headline"),
+  analysis: z.string().describe("2-3 sentences explaining the pick"),
+  key_factor: z.string().describe("The single biggest factor, under 10 words"),
+  upset_alert: z.boolean().describe("True if the underdog has a real shot"),
 });
 
-const COMPILE_SYSTEM = `You compile plain-English crypto trading ideas into Botfolio strategies. Botfolio is a paper-trading game: bots trade simulated money on daily closing prices.
+const CommentarySchema = z.object({ line: z.string().describe("One energetic sentence, under 25 words") });
 
-Coins available: ${ASSETS.map((a) => `${a} (${ASSET_NAMES[a]})`).join(", ")}.
+const PREVIEW_SYSTEM = `You are "the Bot", Clutch's AI sports analyst. Fans try to beat your picks, so make a clear call on who wins and explain it like a sharp, fun TV analyst.
 
-Each condition compares one indicator for the coin being considered against a threshold. All values are percentages unless noted:
-- change_pct: % price change over the last \`period\` days. "Drops 10% in a week" = change_pct, period 7, below, -10.
-- price_vs_sma: % distance of price from its \`period\`-day moving average. "Above the 50-day average" = period 50, above, 0.
-- sma_cross: % gap between the \`period\`-day average and the slower \`period2\`-day average. "Golden cross" = period 50, period2 200, above, 0.
-- rsi: RSI over \`period\` days (use 14 unless stated), value 0-100.
-- drawdown_from_high: how far (positive %) price sits below its \`period\`-day high.
-- volatility: standard deviation of daily % moves over \`period\` days.
-period2 is null for everything except sma_cross.
+Base your pick on the data provided: records, home/away and betting lines. Don't state injuries, trades or news as fact, because your knowledge may be out of date; general team context is fine if you hedge it. Moneylines are American odds. Never encourage anyone to gamble.`;
 
-Entry conditions must ALL hold to buy; exit conditions trigger a sell if ANY holds. Use stop_loss_pct / take_profit_pct for "sell if it loses X%" / "sell when it's up X%" relative to the buy price. "Top N performers" means rank_by_momentum. "Buy and hold" means no entry and no exit conditions.
+const BOT_SYSTEM = `You turn a fan's betting idea into a Clutch betting bot. Bots bet free play coins on finished games using the closing line.
 
-Capture what the user asked for without adding rules they didn't ask for. When something is unspecified: no coin mentioned means BTC; "all coins" means every coin; size positions so max_positions × position_size_pct is about 100. Give the bot a catchy 1-3 word name.`;
-
-const COACH_SYSTEM = `You are Botfolio's AI coach. You review a paper-trading bot's one-year backtest on simulated money and give an honest, specific, encouraging critique, like a sharp trading mentor. Ground every point in the numbers given. Remember that a backtest can be luck or overfitting, and never suggest trading real money or promise future returns. Keep each point to one short sentence.`;
+Fields:
+- sports: any of ${SPORT_KEYS.join(", ")}. If none mentioned, use all.
+- pick: favorite | underdog | home | away | ai_pick (back the AI analyst's pick) | fade_ai (bet against the AI's pick).
+- min_prob / max_prob: limits on the chosen side's implied win chance, in percent (e.g. "big favorites" ≈ min 70; "live underdogs" ≈ min 35). null if not mentioned.
+- stake: coins per bet, default 100.
+Capture what the fan said without adding rules they didn't ask for. Give the bot a catchy 1-3 word name.`;
 
 let client = null;
 
@@ -44,14 +42,14 @@ export function aiMode() {
 }
 
 function getClient() {
-  if (!client) client = new Anthropic({ timeout: 90_000, maxRetries: 1 });
+  if (!client) client = new Anthropic({ timeout: 60_000, maxRetries: 1 });
   return client;
 }
 
 async function structuredCall({ system, prompt, schema, effort }) {
   const response = await getClient().beta.messages.parse({
     model: MODEL,
-    max_tokens: 16000,
+    max_tokens: 8000,
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
     output_config: { effort, format: betaZodOutputFormat(schema) },
@@ -72,42 +70,49 @@ function logFallback(feature, error) {
   console.error(`[ai] ${feature} failed (${detail}). Using offline fallback.`);
 }
 
-export async function compileStrategy(text) {
-  if (aiMode() === "demo") return { ...parseStrategyOffline(text), source: "demo" };
+const describeTeam = (t) => `${t.name}${t.record ? ` (${t.record})` : ""}`;
+
+export async function previewGame(game) {
+  if (aiMode() === "demo") return offlinePreview(game);
+  const o = game.odds;
+  const lines = o
+    ? `Moneyline: ${game.home.short} ${formatML(o.homeML)}, ${game.away.short} ${formatML(o.awayML)}${o.drawML ? `, draw ${formatML(o.drawML)}` : ""}. Total: ${o.total ?? "n/a"}.`
+    : "No betting line available.";
+  const prompt = `<game>\n${SPORTS[game.sport].label} · ${game.league}${game.source === "demo" ? " (a fictional demo league; use only the data here)" : ""}\nAway: ${describeTeam(game.away)}\nHome: ${describeTeam(game.home)}\nStarts: ${game.startsAt}\n${lines}\n</game>`;
   try {
-    const raw = await structuredCall({
-      system: COMPILE_SYSTEM,
-      prompt: `<strategy_idea>\n${text}\n</strategy_idea>`,
-      schema: StrategySchema,
-      effort: "medium",
-    });
-    return { strategy: sanitizeStrategy(raw), notes: [], source: "ai" };
+    const p = await structuredCall({ system: PREVIEW_SYSTEM, prompt, schema: PreviewSchema, effort: "low" });
+    return { ...p, win_probability: Math.round(Math.min(99, Math.max(50, p.win_probability))), source: "ai" };
   } catch (error) {
-    logFallback("compileStrategy", error);
-    return { ...parseStrategyOffline(text), source: "demo" };
+    logFallback("previewGame", error);
+    return offlinePreview(game);
   }
 }
 
-export async function coachStrategy(strategy, result) {
-  if (aiMode() === "demo") return { ...coachOffline(strategy, result), source: "demo" };
-  const rules = describeStrategy(strategy)
-    .map((s) => `${s.title}:\n${s.items.map((i) => `- ${i}`).join("\n")}`)
-    .join("\n");
-  const prompt = `<bot name="${strategy.name.replace(/["<>]/g, "")}">\n${rules}\n</bot>\n<backtest>\n${JSON.stringify(
-    { ...result.stats, period: `${result.startDate} to ${result.endDate}`, recentTrades: result.trades.slice(-12) },
-    null,
-    2,
-  )}\n</backtest>`;
+export async function compileBot(text) {
+  if (aiMode() === "demo") return { ...parseBotOffline(text), source: "demo" };
   try {
-    const coach = await structuredCall({ system: COACH_SYSTEM, prompt, schema: CoachSchema, effort: "low" });
-    return {
-      ...coach,
-      strengths: coach.strengths.slice(0, 3),
-      weaknesses: coach.weaknesses.slice(0, 3),
-      source: "ai",
-    };
+    const raw = await structuredCall({ system: BOT_SYSTEM, prompt: `<idea>\n${text}\n</idea>`, schema: BotRulesSchema, effort: "low" });
+    return { rules: sanitizeRules(raw), notes: [], source: "ai" };
   } catch (error) {
-    logFallback("coachStrategy", error);
-    return { ...coachOffline(strategy, result), source: "demo" };
+    logFallback("compileBot", error);
+    return { ...parseBotOffline(text), source: "demo" };
+  }
+}
+
+// Upgrades a template call into a livelier line for big moments.
+export async function commentate(game, moment) {
+  if (aiMode() === "demo") return null;
+  const prompt = `<moment kind="${moment.kind}">\n${moment.text}\n</moment>\nGame: ${game.away.name} at ${game.home.name} (${SPORTS[game.sport].label}). Score: ${game.away.short} ${game.away.score}, ${game.home.short} ${game.home.score}. ${game.clock ?? ""}`;
+  try {
+    const { line } = await structuredCall({
+      system: "You are an energetic live sports commentator for a fan watch party. Write one line about this moment. Use only the facts given.",
+      prompt,
+      schema: CommentarySchema,
+      effort: "low",
+    });
+    return line.slice(0, 280);
+  } catch (error) {
+    logFallback("commentate", error);
+    return null;
   }
 }

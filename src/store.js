@@ -1,5 +1,5 @@
-// A small JSON-file database. Fine for launch and the first few thousand bots;
-// move to Postgres once traffic justifies it (see README).
+// A small JSON-file database with debounced writes. Fine for launch; move to
+// Postgres once traffic justifies it (see README).
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -8,45 +8,44 @@ export function newId(bytes = 6) {
   return crypto.randomBytes(bytes).toString("base64url");
 }
 
-export function createStore(file, { seed } = {}) {
-  let db;
-  if (file && fs.existsSync(file)) {
-    db = JSON.parse(fs.readFileSync(file, "utf8"));
-  } else {
-    db = { bots: seed ? seed() : [], waitlist: [] };
-    persist();
-  }
+export function tokensMatch(a, b) {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
 
-  function persist() {
+const EMPTY = () => ({
+  fans: {}, // id -> fan
+  picks: {}, // `${fanId}:${gameId}` -> pick
+  bots: {}, // id -> bot
+  markets: {}, // marketId -> { qYes, qNo, volume, trades }
+  positions: {}, // `${fanId}:${marketId}:${outcome}` -> position
+  messages: {}, // gameId -> [message]
+  previews: {}, // gameId -> preview (locked before kickoff)
+  waitlist: [],
+});
+
+export function createStore(file) {
+  let db = EMPTY();
+  const fresh = !(file && fs.existsSync(file));
+  if (!fresh) db = { ...EMPTY(), ...JSON.parse(fs.readFileSync(file, "utf8")) };
+
+  let timer = null;
+  function flush() {
+    clearTimeout(timer);
+    timer = null;
     if (!file) return;
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = `${file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
+    fs.writeFileSync(tmp, JSON.stringify(db));
     fs.renameSync(tmp, file);
   }
 
   return {
-    bots: () => db.bots,
-    getBot: (id) => db.bots.find((b) => b.id === id) || null,
-    createBot(fields) {
-      const bot = { id: newId(), createdAt: new Date().toISOString(), sample: false, hype: 0, clones: 0, ...fields };
-      db.bots.push(bot);
-      persist();
-      return bot;
+    db,
+    fresh,
+    save() {
+      if (!timer) timer = setTimeout(flush, 250);
     },
-    updateBot(id, changes) {
-      const bot = db.bots.find((b) => b.id === id);
-      if (!bot) return null;
-      Object.assign(bot, typeof changes === "function" ? changes(bot) : changes);
-      persist();
-      return bot;
-    },
-    addToWaitlist(entry) {
-      const existing = db.waitlist.find((w) => w.email === entry.email);
-      if (existing) Object.assign(existing, entry);
-      else db.waitlist.push({ ...entry, createdAt: new Date().toISOString() });
-      persist();
-    },
-    waitlist: () => db.waitlist,
+    flush,
   };
 }

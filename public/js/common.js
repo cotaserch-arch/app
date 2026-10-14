@@ -1,4 +1,4 @@
-// Shared helpers and page chrome (header, ticker, footer, ads, app install).
+// Shared helpers and page chrome: header, live scores strip, join flow, ads.
 
 export const $ = (id) => document.getElementById(id);
 
@@ -11,182 +11,206 @@ export function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
-export function usd(n, { compact = false } = {}) {
-  if (n == null) return "–";
-  const digits = Math.abs(n) >= 100 ? 0 : Math.abs(n) >= 1 ? 2 : 4;
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    notation: compact ? "compact" : "standard",
-    maximumFractionDigits: compact ? 1 : digits,
-  }).format(n);
+export const coins = (n) => `🪙 ${Math.floor(n ?? 0).toLocaleString()}`;
+export const ml = (n) => (n == null ? "–" : n > 0 ? `+${n}` : `${n}`);
+export const signed = (n) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(Math.round(n)).toLocaleString()}`;
+
+export function localDate(offsetDays = 0) {
+  const d = new Date(Date.now() + offsetDays * 86_400_000);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-// Signed percentage with an arrow, so up/down never relies on color alone.
-export function pct(n, { arrow = true } = {}) {
-  if (n == null) return '<span class="flat">–</span>';
-  const cls = n > 0 ? "up" : n < 0 ? "down" : "flat";
-  const sign = n > 0 ? "+" : n < 0 ? "−" : "";
-  const icon = arrow ? (n > 0 ? "▲ " : n < 0 ? "▼ " : "") : "";
-  return `<span class="num ${cls}">${icon}${sign}${Math.abs(n).toFixed(2)}%</span>`;
+export function kickoff(iso) {
+  return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-export function rankLabel(rank) {
-  return ["🥇", "🥈", "🥉"][rank - 1] || `#${rank}`;
+export function statusLabel(g) {
+  if (g.status === "live") return `<span class="status-live"><span class="live-dot"></span>LIVE · ${escapeHtml(g.clock || "")}</span>`;
+  if (g.status === "final") return `<span>${escapeHtml(g.clock || "Final")}</span>`;
+  return `<span>${kickoff(g.startsAt)}</span>`;
 }
+
+export function teamLogo(t) {
+  return `<span class="team-logo">${t.logo ? `<img src="${escapeHtml(t.logo)}" alt="" loading="lazy">` : escapeHtml((t.abbr || t.short || "?").slice(0, 3))}</span>`;
+}
+
+// ---------- Fan identity (per browser) ----------
+
+const TOKEN_KEY = "clutch.token";
+export function token() {
+  try {
+    return localStorage.getItem(TOKEN_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+export function setToken(t) {
+  try {
+    localStorage.setItem(TOKEN_KEY, t);
+  } catch {
+    // Private mode; the session still works until the tab closes.
+  }
+  sessionToken = t;
+  tellNativeApp();
+}
+
+// Inside the iPhone/Android app, hand the fan code to the native shell so it
+// can register this device for push notifications.
+function tellNativeApp() {
+  const t = token() || sessionToken;
+  if (t && window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({ type: "fan", token: t }));
+}
+let sessionToken = "";
 
 export async function api(path, { method = "GET", body } = {}) {
-  const res = await fetch(path, {
-    method,
-    headers: body === undefined ? {} : { "content-type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  const headers = {};
+  if (body !== undefined) headers["content-type"] = "application/json";
+  const t = token() || sessionToken;
+  if (t) headers["x-fan-token"] = t;
+  const res = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   let data = {};
   try {
     data = await res.json();
   } catch {
     // Non-JSON error.
   }
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) {
+    const err = new Error(data.error || `Request failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
   return data;
 }
-
-export function setBusy(button, busy, label) {
-  if (busy) {
-    button.dataset.label = button.innerHTML;
-    button.disabled = true;
-    button.innerHTML = `<span class="spinner" aria-hidden="true"></span> ${escapeHtml(label)}`;
-  } else {
-    button.disabled = false;
-    if (button.dataset.label) button.innerHTML = button.dataset.label;
-  }
-}
-
-// ---------- Local preferences (per browser) ----------
-
-function readLocal(key, fallback) {
-  try {
-    return JSON.parse(localStorage.getItem(key)) ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-function writeLocal(key, value) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Storage unavailable (private mode); nothing to remember.
-  }
-}
-export const myBots = () => readLocal("botfolio.mine", []);
-export const rememberBot = (id) => writeLocal("botfolio.mine", [id, ...myBots().filter((x) => x !== id)].slice(0, 50));
-export const traderName = () => readLocal("botfolio.trader", "");
-export const saveTraderName = (name) => writeLocal("botfolio.trader", name);
-export const hyped = () => readLocal("botfolio.hyped", {});
-export function markHyped(id) {
-  const today = new Date().toISOString().slice(0, 10);
-  writeLocal("botfolio.hyped", { ...hyped(), [id]: today });
-}
-export const hypedToday = (id) => hyped()[id] === new Date().toISOString().slice(0, 10);
-
-export async function hype(id, button) {
-  if (hypedToday(id)) return;
-  try {
-    const { hype: count } = await api(`/api/bots/${encodeURIComponent(id)}/hype`, { method: "POST", body: {} });
-    markHyped(id);
-    button.classList.add("done");
-    button.innerHTML = `🔥 ${count}`;
-  } catch {
-    // Rate-limited or offline; ignore.
-  }
-}
-
-// ---------- Page chrome ----------
 
 let configPromise;
 export const config = () => (configPromise ??= api("/api/config"));
 
+let mePromise = null;
+export function me({ refresh = false } = {}) {
+  if (!token() && !sessionToken) return Promise.resolve(null);
+  if (refresh || !mePromise) mePromise = api("/api/me").catch(() => null);
+  return mePromise;
+}
+
+// Asks for a handle the first time someone tries to play. Resolves when joined.
+export function ensureFan() {
+  if (token() || sessionToken) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const back = document.createElement("div");
+    back.className = "modal-back";
+    back.innerHTML = `
+      <form class="card glow modal" autocomplete="off">
+        <h2 style="font-style:italic">Join Clutch 🏆</h2>
+        <p class="muted">Pick a handle and get <b class="num">1,000</b> free coins. No email, no password.</p>
+        <label for="join-handle">Your handle</label>
+        <input id="join-handle" maxlength="20" required pattern="[A-Za-z0-9_.\\-]{2,20}" placeholder="e.g. clutch_king">
+        <button class="btn block" style="margin-top:14px" type="submit">Let's go</button>
+        <button class="btn ghost block" style="margin-top:8px" type="button" data-close>Not now</button>
+        <div class="error" role="alert"></div>
+      </form>`;
+    document.body.append(back);
+    const form = back.querySelector("form");
+    const input = back.querySelector("input");
+    input.focus();
+    const close = (ok) => {
+      back.remove();
+      resolve(ok);
+    };
+    back.querySelector("[data-close]").addEventListener("click", () => close(false));
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errBox = back.querySelector(".error");
+      errBox.textContent = "";
+      try {
+        const ref = new URLSearchParams(location.search).get("ref");
+        const { token: t } = await api("/api/fans", { method: "POST", body: { handle: input.value.trim(), ref } });
+        setToken(t);
+        await refreshCoins();
+        toast(ref ? "🎉 Welcome! Referral bonus added." : "🎉 Welcome to Clutch! 1,000 coins added.");
+        close(true);
+      } catch (err) {
+        errBox.textContent = err.message;
+      }
+    });
+  });
+}
+
+// ---------- Chrome ----------
+
 const NAV = [
-  ["/", "Build", "build"],
-  ["/league", "League", "league"],
-  ["/battle", "Battle", "battle"],
+  ["/", "Today", "today"],
+  ["/bots", "Bots", "bots"],
+  ["/leaders", "Leaders", "leaders"],
   ["/pro", "Pro", "pro"],
 ];
+
+export async function refreshCoins() {
+  const slot = $("coin-slot");
+  if (!slot) return;
+  const data = await me({ refresh: true });
+  slot.innerHTML = data
+    ? `<a class="coin-chip" href="/me" title="Your profile">${coins(data.profile.coins)}</a>`
+    : `<button class="btn sm" type="button" id="join-btn">Join</button>`;
+  $("join-btn")?.addEventListener("click", () => ensureFan());
+}
 
 export function renderShell(active) {
   const header = document.createElement("header");
   header.className = "site-header";
   header.innerHTML = `
     <div class="wrap">
-      <a class="logo" href="/"><span class="logo-mark" aria-hidden="true">🤖</span>Botfolio</a>
+      <a class="logo" href="/"><span class="logo-mark" aria-hidden="true">⚡</span>Clutch</a>
       <nav class="nav">
-        ${NAV.map(([href, label, key]) => `<a href="${href}" class="${key === active ? "active" : ""} ${key === "build" ? "hide-sm" : ""}">${label}</a>`).join("")}
-        <button class="btn sm hidden" id="install-btn" type="button">Install app</button>
+        ${NAV.map(([href, label, key]) => `<a href="${href}" class="${key === active ? "active" : ""} ${key === "pro" ? "hide-sm" : ""}">${label}</a>`).join("")}
+        <span id="coin-slot"></span>
       </nav>
     </div>`;
-  const tickerBar = document.createElement("div");
-  tickerBar.className = "ticker";
-  tickerBar.setAttribute("aria-label", "Crypto prices");
-  document.body.prepend(header, tickerBar);
+  const strip = document.createElement("div");
+  strip.className = "scores hidden";
+  document.body.prepend(header, strip);
 
   const footer = document.createElement("footer");
   footer.innerHTML = `
-    <div class="wrap row">
-      <div>
-        <strong>Botfolio</strong> · The AI trading league
-        <p>Paper trading only. Every bot trades simulated money, and nothing here is financial advice. Backtests and past results don't predict future returns.</p>
+    <div class="wrap">
+      <div class="row" style="align-items:flex-start">
+        <div><strong>Clutch</strong> · The AI sports app <span id="source-note"></span></div>
+        <div class="row start" style="gap:14px"><a href="/pro">Pro</a><a href="/pro#partners">Partners</a><a href="/privacy">Privacy</a></div>
       </div>
-      <div class="muted" id="data-source"></div>
+      <p>Free to play. Coins are for fun: they can't be bought, sold or cashed out. Clutch is not a sportsbook. Partner offers are only for adults 21+ in legal jurisdictions. Gambling problem? Call 1-800-GAMBLER.</p>
     </div>`;
   document.body.append(footer);
 
-  loadTicker(tickerBar);
-  setupInstall();
+  refreshCoins();
+  tellNativeApp();
+  loadScores(strip);
   config()
     .then((c) => {
-      $("data-source").innerHTML =
-        c.market.source === "live"
-          ? `Prices: Coinbase, through ${escapeHtml(c.market.lastDate)}`
-          : `Prices: <b>simulated market</b> (live prices connect when deployed)`;
+      $("source-note").innerHTML = c.source === "demo" ? '· <span class="badge demo">Demo league: fictional teams</span>' : "";
       renderAds(c.ads);
     })
     .catch(() => {});
-
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 }
 
-async function loadTicker(bar) {
+async function loadScores(strip) {
   try {
-    const { ticker, source } = await api("/api/market");
-    const items = ticker
-      .map((t) => `<span class="tick"><b>${t.asset}</b><span class="px num">${usd(t.price)}</span>${pct(t.change24hPct)}</span>`)
-      .join("");
-    const tag = source === "live" ? "" : '<span class="tick"><span class="badge sim">SIMULATED MARKET</span></span>';
-    bar.innerHTML = `<div class="ticker-track">${tag}${items}${tag}${items}</div>`;
+    const { games } = await api(`/api/games?date=${localDate()}&tz=${new Date().getTimezoneOffset()}`);
+    const shown = games.filter((g) => g.status === "live").concat(games.filter((g) => g.status === "final").slice(-4));
+    if (!shown.length) return;
+    strip.innerHTML = `<div class="scores-track">${shown
+      .map(
+        (g) => `<a class="score-pill" href="/game/${encodeURIComponent(g.id)}">${g.status === "live" ? '<span class="live-dot"></span>' : ""}
+          <span>${escapeHtml(g.away.abbr || g.away.short)} <b class="num">${g.away.score}</b></span>
+          <span>${escapeHtml(g.home.abbr || g.home.short)} <b class="num">${g.home.score}</b></span>
+          <span class="muted">${escapeHtml(g.status === "live" ? g.clock : "F")}</span></a>`,
+      )
+      .join("")}</div>`;
+    strip.classList.remove("hidden");
   } catch {
-    bar.remove();
+    // Scores are a nice-to-have.
   }
 }
 
-function setupInstall() {
-  let deferred = null;
-  const btn = $("install-btn");
-  window.addEventListener("beforeinstallprompt", (e) => {
-    e.preventDefault();
-    deferred = e;
-    btn.classList.remove("hidden");
-  });
-  btn.addEventListener("click", async () => {
-    if (!deferred) return;
-    deferred.prompt();
-    await deferred.userChoice.catch(() => {});
-    deferred = null;
-    btn.classList.add("hidden");
-  });
-}
-
-// Ad slots: Google AdSense when configured, a direct sponsor when set,
-// otherwise a house ad selling the slot.
 let adsenseLoaded = false;
 function renderAds(ads) {
   for (const slot of document.querySelectorAll(".ad-slot")) {
@@ -204,118 +228,67 @@ function renderAds(ads) {
     } else if (ads.sponsor) {
       slot.innerHTML = `<a class="ad-house" href="${escapeHtml(ads.sponsor.url)}" rel="sponsored noopener" target="_blank"><div><div class="ad-tag">Sponsored</div><strong>${escapeHtml(ads.sponsor.name)}</strong> ${escapeHtml(ads.sponsor.text)}</div><span class="btn sm ghost">Learn more →</span></a>`;
     } else {
-      slot.innerHTML = `<div class="ad-house"><div><div class="ad-tag">Sponsored</div><strong>Your brand here.</strong> Put your exchange, wallet or app in front of crypto traders every day.</div><a class="btn sm ghost" href="/pro#sponsor">Sponsor a season →</a></div>`;
+      slot.innerHTML = `<div class="ad-house"><div><div class="ad-tag">Sponsored</div><strong>Your brand here.</strong> Reach sports fans every game day: sportsbooks, sports drinks, streaming, gear.</div><a class="btn sm ghost" href="/pro#partners">Advertise →</a></div>`;
     }
   }
 }
 
-// ---------- Shared bits of UI ----------
+// ---------- Small UI helpers ----------
 
-export function sparkline(values, { width = 110, height = 32 } = {}) {
-  if (!values?.length) return "";
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min || 1;
-  const pts = values
-    .map((v, i) => `${((i / Math.max(1, values.length - 1)) * (width - 2) + 1).toFixed(1)},${(height - 2 - ((v - min) / span) * (height - 4)).toFixed(1)}`)
-    .join(" ");
-  const up = values.at(-1) >= values[0];
-  return `<svg class="spark" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${up ? "var(--up)" : "var(--down)"}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+export function toast(text) {
+  document.querySelector(".toast")?.remove();
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.setAttribute("role", "status");
+  el.textContent = text;
+  document.body.append(el);
+  setTimeout(() => el.remove(), 2600);
 }
 
-export function boardRows(bots, { compact = false } = {}) {
-  return bots
-    .map(
-      (b) => `
-      <tr data-href="/bot/${encodeURIComponent(b.id)}">
-        <td class="rank">${rankLabel(b.rank)}</td>
-        <td>
-          <a class="botname" href="/bot/${encodeURIComponent(b.id)}">${escapeHtml(b.name)}</a>
-          ${b.sample ? '<span class="badge">Sample</span>' : ""}
-          <div class="creator">@${escapeHtml(b.creator)} · ${b.daysLive}d live <span class="badge-icons" title="${escapeHtml(b.badges.map((x) => x.name).join(", "))}">${b.badges.map((x) => x.icon).join("")}</span></div>
-        </td>
-        <td class="r">${pct(b.returnPct)}</td>
-        <td class="r hide-sm">${pct(b.returnPct - b.benchmarkReturnPct, { arrow: false })}</td>
-        <td class="hide-sm">${sparkline(b.spark)}</td>
-        ${compact ? "" : `<td class="hide-sm small muted">${escapeHtml(b.holdings.join(", ") || "Cash")}</td>`}
-        <td class="r"><button class="hype-btn ${hypedToday(b.id) ? "done" : ""}" data-hype="${escapeHtml(b.id)}" aria-label="Hype ${escapeHtml(b.name)}">🔥 ${b.hype}</button></td>
-      </tr>`,
-    )
-    .join("");
-}
-
-export function boardTable(bots, opts = {}) {
-  return `
-    <div class="table-wrap"><table class="board">
-      <thead><tr>
-        <th>Rank</th><th>Bot</th><th class="r">Return</th><th class="r hide-sm">vs BTC</th><th class="hide-sm">Trend</th>
-        ${opts.compact ? "" : '<th class="hide-sm">Holding</th>'}<th class="r">Hype</th>
-      </tr></thead>
-      <tbody>${boardRows(bots, opts)}</tbody>
-    </table></div>`;
-}
-
-// Row clicks open the bot; hype buttons hype.
-export function wireBoard(container) {
-  container.addEventListener("click", (e) => {
-    const hypeBtn = e.target.closest("[data-hype]");
-    if (hypeBtn) {
-      e.preventDefault();
-      e.stopPropagation();
-      hype(hypeBtn.dataset.hype, hypeBtn);
-      return;
-    }
-    if (e.target.closest("a")) return;
-    const row = e.target.closest("tr[data-href]");
-    if (row) location.href = row.dataset.href;
-  });
-}
-
-export function rulesHtml(sections) {
-  return sections
-    .map((s) => `<h4>${escapeHtml(s.title)}</h4><ul>${s.items.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>`)
-    .join("");
-}
-
-export function statTiles(stats) {
-  const tiles = [
-    ["Return", pct(stats.returnPct)],
-    ["vs Bitcoin", pct(stats.returnPct - stats.benchmarkReturnPct, { arrow: false })],
-    ["Worst drop", `<span class="num">${stats.maxDrawdownPct.toFixed(1)}%</span>`],
-    ["Win rate", stats.winRatePct == null ? '<span class="flat">–</span>' : `<span class="num">${stats.winRatePct}%</span>`],
-    ["Trades", `<span class="num">${stats.buys}</span>`],
-  ];
-  return tiles.map(([label, value]) => `<div class="stat"><div class="label">${label}</div><div class="value">${value}</div></div>`).join("");
-}
-
-export function coachHtml(c) {
-  const list = (items) => items.map((i) => `<li>${escapeHtml(i)}</li>`).join("");
-  return `
-    <div class="coach">
-      <div class="grade ${escapeHtml(c.grade)}" aria-label="Grade ${escapeHtml(c.grade)}">${escapeHtml(c.grade)}</div>
-      <div>
-        <div class="row" style="justify-content:flex-start;gap:8px"><strong>AI Coach</strong><span class="badge brand">${c.source === "ai" ? "✨ Claude" : "Quick review"}</span></div>
-        <h3 style="margin:6px 0 10px;font-size:1.15rem">${escapeHtml(c.verdict)}</h3>
-        ${c.strengths.length ? `<div class="up small"><b>What works</b></div><ul>${list(c.strengths)}</ul>` : ""}
-        ${c.weaknesses.length ? `<div class="down small"><b>What hurts</b></div><ul>${list(c.weaknesses)}</ul>` : ""}
-        <div><b>💡 Try next:</b> ${escapeHtml(c.suggestion)}</div>
-      </div>
-    </div>`;
+export function setBusy(button, busy, label) {
+  if (busy) {
+    button.dataset.label = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = `<span class="spinner" aria-hidden="true"></span> ${escapeHtml(label)}`;
+  } else {
+    button.disabled = false;
+    if (button.dataset.label) button.innerHTML = button.dataset.label;
+  }
 }
 
 export async function share({ title, text, url }) {
   if (navigator.share) {
     try {
       await navigator.share({ title, text, url });
-      return "shared";
+      return;
     } catch {
-      // Cancelled; fall through to copying.
+      // Cancelled; fall back to copying.
     }
   }
   try {
-    await navigator.clipboard.writeText(url);
-    return "copied";
+    await navigator.clipboard.writeText(`${text} ${url}`);
+    toast("🔗 Copied! Paste it anywhere.");
   } catch {
-    return "failed";
+    toast(url);
   }
+}
+
+export function badgesHtml(badges) {
+  return badges.map((b) => `<span class="achievement" title="${escapeHtml(b.why)}">${b.icon} ${escapeHtml(b.name)}</span>`).join("");
+}
+
+export function rankLabel(rank) {
+  return ["🥇", "🥈", "🥉"][rank - 1] || `#${rank}`;
+}
+
+export function sparkline(values, { width = 100, height = 28 } = {}) {
+  if (!values?.length || values.length < 2) return "";
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const pts = values
+    .map((v, i) => `${((i / (values.length - 1)) * (width - 2) + 1).toFixed(1)},${(height - 2 - ((v - min) / span) * (height - 4)).toFixed(1)}`)
+    .join(" ");
+  const up = values.at(-1) >= values[0];
+  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${up ? "var(--up)" : "var(--down)"}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
 }

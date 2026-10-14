@@ -1,212 +1,162 @@
-// Offline versions of the AI features: a rule-based English-to-strategy parser
-// and a simple coach. Used in demo mode (no API key) and as a backup when an
-// AI call fails.
-import { ASSETS, sanitizeStrategy } from "./strategy.js";
+// Offline versions of the AI features: a line-based game model, a rule-based
+// bot parser, and template commentary. Used in demo mode (no API key) and as a
+// backup when an AI call fails.
+import { sanitizeRules } from "./bots.js";
+import { fairProbs, formatML } from "./odds.js";
+import { SPORTS, SPORT_KEYS } from "./sports/teams.js";
 
-const ASSET_WORDS = {
-  BTC: ["bitcoin", "btc"],
-  ETH: ["ethereum", "eth", "ether"],
-  SOL: ["solana", "sol"],
-  XRP: ["xrp", "ripple"],
-  DOGE: ["dogecoin", "doge"],
-  ADA: ["cardano", "ada"],
-  AVAX: ["avalanche", "avax"],
-  LINK: ["chainlink", "link"],
-  LTC: ["litecoin", "ltc"],
-  DOT: ["polkadot", "dot"],
+function recordPct(record) {
+  const parts = String(record || "").split("-").map(Number);
+  if (parts.length < 2 || parts.some(Number.isNaN)) return null;
+  const [w, a, b = 0] = parts;
+  const games = w + a + b;
+  return games ? w / games : null;
+}
+
+export function winProbs(game) {
+  const fair = fairProbs(game.odds);
+  if (fair) return fair;
+  const h = recordPct(game.home.record);
+  const a = recordPct(game.away.record);
+  const home = h != null && a != null ? Math.min(0.85, Math.max(0.15, 0.53 + (h - a) * 0.6)) : 0.54;
+  return { home, away: 1 - home, draw: 0 };
+}
+
+export function offlinePreview(game) {
+  const probs = winProbs(game);
+  const pick = probs.home >= probs.away ? "home" : "away";
+  const other = pick === "home" ? "away" : "home";
+  const team = game[pick];
+  const opp = game[other];
+  const pct = Math.round(probs[pick] * 100);
+  const dogPct = Math.round(probs[other] * 100);
+  const ml = game.odds?.[`${pick}ML`];
+  const headline =
+    pct >= 75 ? `${team.short} should cruise` : pct >= 60 ? `${team.short} have the edge` : pct >= 52 ? `${team.short} by a nose` : `Coin flip, leaning ${team.short}`;
+  const where = pick === "home" ? `host the ${opp.short}` : `visit the ${opp.short}`;
+  const recs = team.record && opp.record ? ` (${team.record} vs ${opp.record})` : "";
+  const line = ml != null ? ` The line has them at ${formatML(ml)}, which works out to about a ${pct}% win chance once the bookmaker's cut is removed.` : ` The model gives them about a ${pct}% win chance.`;
+  const draw = probs.draw ? ` A draw is live too (${Math.round(probs.draw * 100)}%).` : "";
+  return {
+    pick,
+    win_probability: pct,
+    headline,
+    analysis: `The ${team.name} ${where}${recs}.${line}${draw}`,
+    key_factor: pick === "home" ? "Home field and the better line" : "The stronger side, even on the road",
+    // A real underdog with a live chance, not a coin flip.
+    upset_alert: game.sport === "soccer" ? dogPct >= 30 && pct - dogPct >= 8 : dogPct >= 36 && dogPct <= 45,
+    source: "model",
+  };
+}
+
+// ---------- Bot parser ----------
+
+const SPORT_WORDS = {
+  football: /\b(football|nfl|gridiron)\b/,
+  basketball: /\b(basketball|nba|hoops)\b/,
+  baseball: /\b(baseball|mlb)\b/,
+  hockey: /\b(hockey|nhl)\b/,
+  soccer: /\b(soccer|premier league|epl|futbol|fútbol)\b/,
 };
-const NUMBER_WORDS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
-const num = (s) => (s == null ? null : NUMBER_WORDS[s] ?? Number(s));
-const PCT = "(\\d+(?:\\.\\d+)?)\\s*(?:%|percent)";
 
-function findAssets(text) {
-  if (/\b(all|any|every|each)\s+(coins?|crypto|cryptos|tokens?)\b|\b(top|best)\s+(\d+|one|two|three|four|five)?\s*(best\s+)?(perform|coins?|gainers?)/.test(text)) {
-    return [...ASSETS];
-  }
-  const found = ASSETS.filter((a) => ASSET_WORDS[a].some((w) => new RegExp(`\\b${w}\\b`).test(text)));
-  return found;
-}
-
-function findPeriod(clause, fallback) {
-  if (/\b(in|over)\s+(a|one|1)\s+day\b|\b24\s*h|\bdaily\b|\btoday\b/.test(clause)) return 1;
-  if (/\b(a|one|1)\s+week\b|\bweekly\b/.test(clause)) return 7;
-  if (/\b(a|one|1)\s+month\b|\bmonthly\b/.test(clause)) return 30;
-  const m = clause.match(/\b(?:in|over|last|past)\s+(?:the\s+)?(?:last\s+|past\s+)?(\d+|two|three|four|five|ten)\s*(days?|weeks?)\b/);
-  if (m) return num(m[1]) * (m[2].startsWith("week") ? 7 : 1);
-  return fallback;
-}
-
-function splitClauses(text) {
-  return text
-    .split(/(?<=[.;!?])\s+|,\s*(?=(?:and\s+)?(?:then\s+)?(?:sell|exit|buy)\b)|\s+(?=(?:and\s+)?(?:then\s+)?(?:sell|exit)\b)/)
-    .map((c) => c.trim())
-    .filter(Boolean);
-}
-
-export function parseStrategyOffline(rawText) {
-  const text = rawText.toLowerCase().replace(/\s+/g, " ").trim();
+export function parseBotOffline(rawText) {
+  const text = rawText.toLowerCase();
   const notes = [];
-  const entry = [];
-  const exit = [];
-  let rank = null;
-  let stopLoss = null;
-  let takeProfit = null;
-  let archetype = null;
-  const hodl = /\b(never sell|hold forever|forever|diamond hands|hodl|buy and hold)\b/.test(text);
-  const set = (name) => (archetype ??= name);
+  let sports = SPORT_KEYS.filter((s) => SPORT_WORDS[s].test(text));
+  if (!sports.length || /\b(every|all|any) sports?\b/.test(text)) sports = [...SPORT_KEYS];
+
+  let pick = null;
+  if (/\b(fade|against|opposite of|bet against)\b[^.]*\b(ai|bot)\b/.test(text)) pick = "fade_ai";
+  else if (/\b(ai|bot)('s)?\s+(pick|picks)\b|\b(ride|follow|back|copy|trust)\b[^.]*\b(ai|bot)\b/.test(text)) pick = "ai_pick";
+  else if (/\b(underdogs?|dogs?|long ?shots?)\b/.test(text)) pick = "underdog";
+  else if (/\b(favou?rites?|chalk)\b/.test(text)) pick = "favorite";
+  else if (/\b(road|away|visiting|visitors?)\b/.test(text)) pick = "away";
+  else if (/\bhome\b/.test(text)) pick = "home";
+  if (!pick) {
+    pick = "favorite";
+    notes.push("Demo mode couldn't tell which side to back, so it bets favorites. Edit your description or turn on AI for full understanding.");
+  }
+
+  let min = null;
+  let max = null;
   let m;
+  if ((m = text.match(/\bat least (?:an? )?(\d{1,2})\s*%|(\d{1,2})\s*%\s*(?:\+|or (?:more|better|higher))/))) min = Number(m[1] ?? m[2]);
+  if ((m = text.match(/\b(?:at most|under|less than|below|no more than) (?:an? )?(\d{1,2})\s*%/))) max = Number(m[1]);
+  if (min == null && /\b(heavy|big|huge|strong) favou?rites?\b/.test(text)) min = 70;
 
-  let context = "entry";
-  for (const clause of splitClauses(text)) {
-    if (/\b(sell|exit|get out|close)\b/.test(clause)) context = "exit";
-    else if (/\b(buy|enter|get in|hold|own|accumulate|purchase)\b/.test(clause)) context = "entry";
+  const stakeMatch = text.match(/(\d{2,4})\s*coins?/);
+  const venueHome = pick !== "home" && pick !== "away" && /\bhome (underdogs?|dogs?|favou?rites?|teams?)\b/.test(text);
+  const NAMES = { favorite: "Chalk Eater", underdog: "Dog Pound", home: "Home Cookin'", away: "Road Warrior", ai_pick: "AI Disciple", fade_ai: "The Contrarian" };
+  if (venueHome) notes.push("Home-only filters aren't supported yet, so this bot bets every matching game.");
 
-    if (context === "entry") {
-      if ((m = clause.match(new RegExp(`\\b(?:drops?|falls?|dips?|down|crash(?:es)?|declines?|tanks?)\\s+(?:by\\s+)?(?:more than\\s+|over\\s+|at least\\s+)?${PCT}`)))) {
-        entry.push({ indicator: "change_pct", period: findPeriod(clause, 1), period2: null, op: "below", value: -Number(m[1]) });
-        set("dip");
-      } else if ((m = clause.match(new RegExp(`\\b(?:rises?|up|gains?|pumps?|jumps?|climbs?|rallies)\\s+(?:by\\s+)?(?:more than\\s+|over\\s+)?${PCT}`)))) {
-        entry.push({ indicator: "change_pct", period: findPeriod(clause, 1), period2: null, op: "above", value: Number(m[1]) });
-        set("rally");
-      }
-      if (/golden cross/.test(clause)) {
-        entry.push({ indicator: "sma_cross", period: 50, period2: 200, op: "above", value: 0 });
-        set("cross");
-      } else if ((m = clause.match(/(\d+)[-\s]?day (?:moving )?(?:average|ma|sma)? ?cross(?:es)? (?:above|over) (?:the )?(\d+)[-\s]?day/))) {
-        entry.push({ indicator: "sma_cross", period: Number(m[1]), period2: Number(m[2]), op: "above", value: 0 });
-        set("cross");
-      } else if ((m = clause.match(/\b(above|over|below|under)\s+(?:its\s+|the\s+)?(\d+)[-\s]?day\s+(?:moving\s+)?(?:average|ma|sma)/))) {
-        entry.push({ indicator: "price_vs_sma", period: Number(m[2]), period2: null, op: /above|over/.test(m[1]) ? "above" : "below", value: 0 });
-        set("trend");
-      }
-      if ((m = clause.match(/\brsi\b[^\d]{0,25}?(below|under|above|over)\s*(\d+)/))) {
-        entry.push({ indicator: "rsi", period: 14, period2: null, op: /below|under/.test(m[1]) ? "below" : "above", value: Number(m[2]) });
-        set("rsi");
-      } else if (/\boversold\b/.test(clause)) {
-        entry.push({ indicator: "rsi", period: 14, period2: null, op: "below", value: 30 });
-        set("rsi");
-      }
-      if ((m = clause.match(new RegExp(`${PCT}\\s+(?:below|off|from|under)\\s+(?:its\\s+|the\\s+)?(?:(\\d+)[-\\s]?day\\s+)?(?:high|ath|all[-\\s]time high|peak|top)`)))) {
-        entry.push({ indicator: "drawdown_from_high", period: Number(m[2]) || 90, period2: null, op: "above", value: Number(m[1]) });
-        set("bottom");
-      }
-      if ((m = clause.match(/\b(?:top|best)\s+(\d+|one|two|three|four|five)?\s*(?:best\s+)?(?:perform|coins?|gainers?)|\bmomentum\b/))) {
-        rank = { period: findPeriod(clause, 30), top_n: num(m[1]) || 3 };
-        set("momentum");
-      }
-    } else {
-      if ((m = clause.match(new RegExp(`\\b(?:up|gains?|rises?|profit(?:\\s+of)?|is up|it's up|its up)\\s+(?:by\\s+)?(?:more than\\s+)?${PCT}|take[-\\s]profit\\s+(?:at\\s+|of\\s+)?${PCT}`)))) {
-        takeProfit = Number(m[1] ?? m[2]);
-      }
-      if ((m = clause.match(new RegExp(`\\b(?:falls?|drops?|loses?|down|declines?)\\s+(?:another\\s+|a further\\s+)?(?:by\\s+)?(?:more than\\s+)?${PCT}|stop[-\\s]?loss\\s+(?:of\\s+|at\\s+)?${PCT}`)))) {
-        stopLoss = Number(m[1] ?? m[2]);
-      }
-      if ((m = clause.match(/\b(?:below|under)\s+(?:its\s+|the\s+|that\s+)?(\d+)?[-\s]?(?:day\s+)?(?:moving\s+)?(?:average|ma|sma)/)) || /falls? below it\b/.test(clause)) {
-        const trend = entry.find((c) => c.indicator === "price_vs_sma");
-        exit.push({ indicator: "price_vs_sma", period: Number(m?.[1]) || trend?.period || 50, period2: null, op: "below", value: 0 });
-      }
-      if (/cross(?:es)?\s+(?:back\s+)?(?:below|under)|death cross/.test(clause)) {
-        const cross = entry.find((c) => c.indicator === "sma_cross");
-        exit.push({ indicator: "sma_cross", period: cross?.period ?? 50, period2: cross?.period2 ?? 200, op: "below", value: 0 });
-      }
-      if ((m = clause.match(/\brsi\b[^\d]{0,25}?(above|over)\s*(\d+)/))) {
-        exit.push({ indicator: "rsi", period: 14, period2: null, op: "above", value: Number(m[2]) });
-      } else if (/\boverbought\b/.test(clause)) {
-        exit.push({ indicator: "rsi", period: 14, period2: null, op: "above", value: 70 });
-      }
-      if ((m = clause.match(/(\d+)[-\s]?day\s+(?:gain|return|change|performance)\s+(?:turns|goes|is)\s+negative/))) {
-        exit.push({ indicator: "change_pct", period: Number(m[1]), period2: null, op: "below", value: 0 });
-      }
-    }
-  }
-
-  let assets = findAssets(text);
-  if (!assets.length) {
-    assets = ["BTC"];
-    notes.push("No coin mentioned, so it trades Bitcoin.");
-  }
-
-  if (!entry.length && !rank && !hodl) {
-    entry.push({ indicator: "price_vs_sma", period: 50, period2: null, op: "above", value: 0 });
-    if (!exit.length && stopLoss == null && takeProfit == null) {
-      exit.push({ indicator: "price_vs_sma", period: 50, period2: null, op: "below", value: 0 });
-    }
-    archetype = "trend";
-    notes.push("Demo mode couldn't find a clear buy rule, so it started you with a trend-following rule. Edit your description or turn on AI for full understanding.");
-  }
-  if (hodl && !entry.length && !rank) archetype = "hodl";
-
-  let maxPositions = rank ? rank.top_n : Math.min(assets.length, 4);
-  const explicitMax = text.match(/\b(?:up to|max(?:imum)?(?: of)?|at most|no more than)\s+(\d+|two|three|four|five)\s+(?:coins|positions|trades)/);
-  if (explicitMax) maxPositions = num(explicitMax[1]);
-  let size = Math.floor(100 / maxPositions);
-  if ((m = text.match(/\b(?:put|invest|allocate|use|risk|bet)\s+(\d+)\s*%|(\d+)\s*%\s+(?:per|in each|into each|on each|of (?:the|my) (?:account|portfolio|money))|never (?:put |invest )?more than (\d+)\s*%/))) {
-    size = Number(m[1] ?? m[2] ?? m[3]);
-    // "20% in each coin" across 10 coins means room for 5 at once.
-    if (!explicitMax && !rank) maxPositions = Math.min(assets.length, Math.max(1, Math.floor(100 / size)));
-  }
-
-  const NAMES = {
-    dip: "Dip Hunter",
-    rally: "Rocket Chaser",
-    trend: "Trend Rider",
-    cross: "Cross Fire",
-    rsi: "RSI Sniper",
-    bottom: "Bottom Fisher",
-    momentum: "Momentum Machine",
-    hodl: "Diamond Hands",
+  const first = rawText.trim().split(/(?<=[.!?])\s+/)[0];
+  return {
+    rules: sanitizeRules({
+      name: NAMES[pick],
+      summary: first.length > 200 ? `${first.slice(0, 197)}…` : first,
+      sports,
+      pick,
+      min_prob: min,
+      max_prob: max,
+      stake: stakeMatch ? Number(stakeMatch[1]) : 100,
+    }),
+    notes,
   };
-  const firstSentence = rawText.trim().split(/(?<=[.!?])\s+/)[0];
-  const strategy = sanitizeStrategy({
-    name: NAMES[archetype] || "Custom Bot",
-    summary: firstSentence.length > 200 ? `${firstSentence.slice(0, 197)}…` : firstSentence,
-    assets,
-    entry,
-    exit: hodl ? [] : exit,
-    rank_by_momentum: rank,
-    position_size_pct: size,
-    max_positions: maxPositions,
-    stop_loss_pct: hodl ? null : stopLoss,
-    take_profit_pct: hodl ? null : takeProfit,
-  });
-  return { strategy, notes };
 }
 
-export function coachOffline(strategy, result) {
-  const s = result.stats;
-  const beat = s.returnPct - s.benchmarkReturnPct;
-  const strengths = [];
-  const weaknesses = [];
+// ---------- Live commentary ----------
 
-  if (beat > 0) strengths.push(`Beat simply holding Bitcoin by ${beat.toFixed(1)} points.`);
-  else weaknesses.push(`Trailed simply holding Bitcoin by ${Math.abs(beat).toFixed(1)} points.`);
-  if (s.maxDrawdownPct < 20) strengths.push(`Shallow worst drop (${s.maxDrawdownPct.toFixed(1)}%), which makes it easy to stick with.`);
-  else if (s.maxDrawdownPct > 35) weaknesses.push(`At its worst it was down ${s.maxDrawdownPct.toFixed(1)}% from its peak. Most people would panic-sell there.`);
-  if (s.winRatePct != null && s.winRatePct >= 55) strengths.push(`Wins ${s.winRatePct}% of its closed trades.`);
-  if (s.winRatePct != null && s.winRatePct < 40) weaknesses.push(`Only ${s.winRatePct}% of closed trades were winners.`);
-  if (s.sharpe != null && s.sharpe > 1) strengths.push(`Good return for the risk taken (Sharpe ${s.sharpe}).`);
-  if (s.buys < 3) weaknesses.push(`It barely traded (${s.buys} buy${s.buys === 1 ? "" : "s"}), so the result could be luck.`);
-  if (s.buys > 150) weaknesses.push(`${s.buys} buys in a year. Fees and slippage add up fast.`);
+const leader = (g) => (g.home.score > g.away.score ? "home" : g.away.score > g.home.score ? "away" : null);
 
-  let suggestion;
-  if (s.maxDrawdownPct > 35 && strategy.stop_loss_pct == null) suggestion = "Add a stop loss around 10–15% to cap the big drops.";
-  else if (s.buys < 3) suggestion = "Loosen the buy rule (smaller dip, shorter average) so it finds more trades.";
-  else if (beat < 0 && strategy.assets.length < 3) suggestion = "Let it trade more coins so it has more chances to find winners.";
-  else if (beat < 0) suggestion = "Try a longer moving average or fewer exit rules so it rides trends instead of getting shaken out.";
-  else suggestion = "Enter it in the league to see if the edge holds up on prices it has never seen.";
+function scoreLine(g) {
+  return `${g.away.abbr || g.away.short} ${g.away.score} – ${g.home.abbr || g.home.short} ${g.home.score}${g.clock ? ` · ${g.clock}` : ""}`;
+}
 
-  let grade = "F";
-  if (beat > 0 && s.maxDrawdownPct < 25) grade = "A";
-  else if (beat > 0) grade = "B";
-  else if (s.returnPct > 0) grade = "C";
-  else if (s.returnPct > -15) grade = "D";
+function scoringCall(sport, team, pts) {
+  switch (sport) {
+    case "football":
+      return pts >= 6 ? `🏈 TOUCHDOWN ${team}!` : pts === 3 ? `🎯 ${team} drill the field goal.` : `${team} add ${pts}.`;
+    case "basketball":
+      return `🔥 ${team} on a ${pts}-point burst!`;
+    case "baseball":
+      return `⚾ ${team} plate ${pts} run${pts === 1 ? "" : "s"}!`;
+    case "hockey":
+      return pts > 1 ? `🚨 ${team} strike ${pts} times!` : `🚨 GOAL ${team}!`;
+    default:
+      return pts > 1 ? `⚽ ${team} score ${pts}!` : `⚽ GOOOAL! ${team}!`;
+  }
+}
 
-  const verdicts = {
-    A: "Strong: it beat Bitcoin without scary drops.",
-    B: "Solid: it beat Bitcoin, but the ride was bumpy.",
-    C: "Made money, but holding Bitcoin did better.",
-    D: "Small loss. There's an idea here, but it needs work.",
-    F: "Lost real ground. Rethink the rules before entering.",
-  };
-  return { grade, verdict: verdicts[grade], strengths: strengths.slice(0, 3), weaknesses: weaknesses.slice(0, 3), suggestion };
+// What to say given the last commented state `prev` ({home, away, status}).
+// Returns { text, kind } or null when nothing is worth saying yet.
+export function commentaryFor(game, prev) {
+  if (game.status === "scheduled") return null;
+  if (!prev) {
+    return game.status === "final"
+      ? { kind: "final", text: finalCall(game) }
+      : { kind: "start", text: `📺 We're live! ${game.away.name} at ${game.home.name}. ${scoreLine(game)}` };
+  }
+  if (game.status === "final" && prev.status !== "final") return { kind: "final", text: finalCall(game) };
+  if (game.status !== "live") return null;
+
+  const dh = game.home.score - prev.home;
+  const da = game.away.score - prev.away;
+  if (dh <= 0 && da <= 0) return null;
+  const was = prev.home > prev.away ? "home" : prev.away > prev.home ? "away" : null;
+  const now = leader(game);
+  const leadChange = now && was && now !== was;
+  // Basketball scores constantly, so only call runs and lead changes.
+  if (game.sport === "basketball" && !leadChange && Math.max(dh, da) < 8) return null;
+  const side = dh >= da ? "home" : "away";
+  const call = scoringCall(game.sport, game[side].short, side === "home" ? dh : da);
+  return { kind: leadChange ? "lead" : "score", text: `${leadChange ? "🔄 Lead change! " : ""}${call} ${scoreLine(game)}` };
+}
+
+function finalCall(g) {
+  const w = g.winner;
+  if (w === "draw") return `🏁 FINAL: honors even. ${scoreLine({ ...g, clock: "Final" })}`;
+  const team = g[w];
+  const margin = Math.abs(g.home.score - g.away.score);
+  const flavor = margin >= (SPORTS[g.sport].unit === "points" ? 15 : 3) ? "roll" : margin <= 1 ? "survive" : "win";
+  return `🏁 FINAL: the ${team.short} ${flavor}! ${scoreLine({ ...g, clock: g.clock || "Final" })}`;
 }

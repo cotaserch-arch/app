@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Game Center · Clutch</title>
+  <meta name="theme-color" content="#05080f">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="wrap">
+    <div id="loading" class="empty"><span class="spinner"></span></div>
+    <div id="missing" class="empty hidden"><h2>Game not found</h2><p><a href="/">Back to today's games →</a></p></div>
+
+    <div id="page" class="hidden">
+      <div class="card glow" style="margin:22px 0 16px">
+        <div class="row small muted" style="margin-bottom:12px"><span id="league"></span><span id="status"></span></div>
+        <div class="scoreboard" id="scoreboard"></div>
+        <div class="pick-row" id="pick-row" style="margin-top:16px;max-width:520px;margin-left:auto;margin-right:auto"></div>
+        <div class="small muted" id="pick-note" style="text-align:center;margin-top:8px"></div>
+      </div>
+
+      <div class="row" style="margin-bottom:14px">
+        <div class="tabs" role="tablist">
+          <button class="tab" data-tab="party">📺 Watch party</button>
+          <button class="tab" data-tab="preview">🤖 AI preview</button>
+          <button class="tab" data-tab="markets">📈 Markets</button>
+        </div>
+        <button class="btn ghost sm" id="share-btn">🔗 Share</button>
+      </div>
+
+      <div class="layout">
+        <div>
+          <section class="card" id="tab-party" style="padding:16px">
+            <div class="row" style="margin-bottom:8px"><strong>Watch party</strong><span class="small muted" id="watching"></span></div>
+            <div class="room">
+              <div class="feed" id="feed" aria-live="polite"></div>
+              <div class="reactions" id="reactions"></div>
+              <form class="chat-form" id="chat-form" autocomplete="off">
+                <input id="chat-input" maxlength="280" placeholder="Say something to the room…" aria-label="Chat message">
+                <button class="btn" type="submit">Send</button>
+              </form>
+            </div>
+          </section>
+
+          <section class="card ai-card hidden" id="tab-preview"></section>
+
+          <section class="hidden stack" id="tab-markets"></section>
+        </div>
+        <aside class="stack">
+          <div class="card" id="odds-card"></div>
+          <div class="card hidden" id="partner-card"></div>
+          <div class="ad-slot" data-slot="game"></div>
+        </aside>
+      </div>
+    </div>
+  </main>
+  <script type="module" src="/js/game.js"></script>
+</body>
+</html>

@@ -1,8 +1,8 @@
 // Offline support: cache the app shell, always fetch live data from the network.
-const CACHE = "botfolio-v1";
+const CACHE = "clutch-v1";
 const SHELL = [
-  "/", "/league", "/battle", "/pro", "/bot.html", "/styles.css", "/manifest.webmanifest",
-  "/js/common.js", "/js/chart.js", "/js/describe.js", "/js/home.js", "/js/bot.js", "/js/battle.js",
+  "/", "/bots", "/leaders", "/pro", "/me", "/privacy", "/game.html", "/bot.html", "/styles.css", "/manifest.webmanifest",
+  "/js/common.js", "/js/chart.js", "/js/today.js", "/js/game.js", "/js/bots.js", "/js/bot-stats.js", "/js/rules.js",
   "/icons/icon.svg", "/icons/icon-192.png",
 ];
 
@@ -30,7 +30,12 @@ self.addEventListener("fetch", (event) => {
         return res;
       })
       .catch(() =>
-        caches.match(event.request).then((hit) => hit || (url.pathname.startsWith("/bot/") ? caches.match("/bot.html") : caches.match("/"))),
+        caches.match(event.request).then((hit) => {
+          if (hit) return hit;
+          if (url.pathname.startsWith("/game/")) return caches.match("/game.html");
+          if (url.pathname.startsWith("/bot/")) return caches.match("/bot.html");
+          return caches.match("/");
+        }),
       ),
   );
 });

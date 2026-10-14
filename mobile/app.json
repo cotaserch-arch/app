@@ -9,24 +9,29 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#05080f",
     "ios": {
-      "bundleIdentifier": "com.yourcompany.clutch",
+      "bundleIdentifier": "com.sergiocota.clutch",
       "supportsTablet": false,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "com.yourcompany.clutch",
+      "package": "com.sergiocota.clutch",
       "adaptiveIcon": {
         "backgroundColor": "#05080f",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       }
     },
-    "plugins": ["expo-notifications"],
+    "plugins": [
+      "expo-notifications"
+    ],
     "extra": {
       "appUrl": "https://YOUR-CLUTCH-DOMAIN.com",
-      "eas": {}
-    }
+      "eas": {
+        "projectId": "5e8bcbfe-1b1f-4527-a8a7-c7b57ab6263e"
+      }
+    },
+    "owner": "macbob1818"
   }
 }

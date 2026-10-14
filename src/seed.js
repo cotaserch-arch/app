@@ -1,119 +1,83 @@
-// Sample requests and quotes so a fresh install doesn't look empty. Every
-// record is flagged `sample: true` and labeled "Sample" in the UI.
+// Sample bots so a fresh league isn't empty. Every one is flagged `sample: true`
+// and labeled "Sample" in the app.
 import crypto from "node:crypto";
+import { sanitizeStrategy } from "./strategy.js";
 
-const hoursAgo = (h) => new Date(Date.now() - h * 3_600_000).toISOString();
-const id = () => crypto.randomBytes(6).toString("base64url");
+const daysAgo = (n) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
+const c = (indicator, period, op, value, period2 = null) => ({ indicator, period, period2, op, value });
+const ALL = ["BTC", "ETH", "SOL", "XRP", "DOGE", "ADA", "AVAX", "LINK", "LTC", "DOT"];
 
 const SAMPLES = [
   {
-    request: {
-      rawText: "Need my 2-bedroom apartment moved from Austin to Dallas next Saturday. 3rd floor with an elevator, one piano.",
-      title: "2-bedroom move from Austin to Dallas with a piano",
-      category: "Moving & storage",
-      summary: "Buyer is moving a 2-bedroom apartment from Austin to Dallas next Saturday. Pickup is on the 3rd floor with an elevator. The load includes one upright piano.",
-      location: "Austin → Dallas",
-      timeline: "Next Saturday",
-      budget: "",
-      details: [
-        { label: "Size", value: "2 bedrooms" },
-        { label: "Access", value: "3rd floor, elevator available" },
-        { label: "Special items", value: "1 upright piano" },
-      ],
-      priceEstimate: { low: 1400, high: 2600, currency: "USD", basis: "Long-distance 2-bedroom moves with a piano typically fall in this range." },
-    },
-    quotes: [
-      { businessName: "Lone Star Movers", price: 1850, timeline: "Saturday, 8am pickup", yearsInBusiness: 12, includes: ["3 movers + 26ft truck", "Piano dolly and padding", "Fuel and tolls", "$100k cargo insurance"], message: "We do Austin to Dallas every week. Flat rate, no hourly surprises. Piano handled by our specialty crew." },
-      { businessName: "QuickHaul TX", price: 1290, timeline: "Saturday, 10am pickup", yearsInBusiness: 2, includes: ["2 movers + truck"], message: "Cheapest rate in Austin." },
-      { businessName: "Capital City Moving Co.", price: 2240, timeline: "Saturday or Sunday", yearsInBusiness: 20, includes: ["4 movers", "Full packing service", "Piano crate", "Full-value protection"], message: "Full-service move including packing your kitchen and wrapping furniture. Price is all-inclusive." },
-    ],
-    age: 5,
+    creator: "quantqueen",
+    joined: 90,
+    hype: 41,
+    prompt: "Every day hold the 3 best performing coins over the last 30 days, as long as they're up. Sell a coin when its 30-day gain turns negative or it loses 12%.",
+    strategy: { name: "Momentum Machine", summary: "Rides the 3 hottest coins of the month.", assets: ALL, entry: [c("change_pct", 30, "above", 0)], exit: [c("change_pct", 30, "below", 0)], rank_by_momentum: { period: 30, top_n: 3 }, position_size_pct: 33, max_positions: 3, stop_loss_pct: 12, take_profit_pct: null },
   },
   {
-    request: {
-      rawText: "500 custom printed t-shirts for a company event, 2-color logo on front, mixed sizes, needed by March 15.",
-      title: "500 custom 2-color logo t-shirts by March 15",
-      category: "Products & manufacturing",
-      summary: "Company needs 500 custom t-shirts for an event, with a 2-color logo printed on the front in mixed sizes. Delivery is needed by March 15.",
-      location: "",
-      timeline: "By March 15",
-      budget: "",
-      details: [
-        { label: "Quantity", value: "500 shirts, mixed sizes" },
-        { label: "Print", value: "2-color logo, front only" },
-      ],
-      priceEstimate: { low: 2500, high: 5000, currency: "USD", basis: "Screen-printed tees at this volume usually run $5–10 each." },
-    },
-    quotes: [
-      { businessName: "InkWorks Print Shop", price: 3150, timeline: "Ships in 10 business days", yearsInBusiness: 8, includes: ["Gildan Softstyle tees", "Screen setup", "Free digital proof", "Free shipping"], message: "$6.30/shirt all-in. We'll send a proof within 24 hours." },
-      { businessName: "Bulk Tee Direct", price: 2600, timeline: "Ships in 3 weeks", yearsInBusiness: 4, includes: ["Basic cotton tees", "Screen setup"], message: "Shipping billed separately." },
-    ],
-    age: 20,
+    creator: "dipdiva",
+    joined: 75,
+    hype: 23,
+    prompt: "Buy Bitcoin or Ethereum when it drops more than 10% in a week. Sell when it's up 15% or if it falls another 10%.",
+    strategy: { name: "Dip Hunter", summary: "Buys sharp weekly dips in the majors.", assets: ["BTC", "ETH"], entry: [c("change_pct", 7, "below", -10)], exit: [], rank_by_momentum: null, position_size_pct: 50, max_positions: 2, stop_loss_pct: 10, take_profit_pct: 15 },
   },
   {
-    request: {
-      rawText: "Roof is leaking over the kitchen after the storm, need someone to look at it this week in Denver.",
-      title: "Roof leak over the kitchen after a storm",
-      category: "Home services",
-      summary: "Buyer has a roof leak above the kitchen following a recent storm and needs an inspection and repair this week in Denver.",
-      location: "Denver",
-      timeline: "This week",
-      budget: "",
-      details: [{ label: "Problem", value: "Active leak over kitchen after storm" }],
-      priceEstimate: { low: 350, high: 1200, currency: "USD", basis: "Most storm leak repairs are a few hundred dollars; widespread damage costs more." },
-    },
-    quotes: [],
-    age: 1,
+    creator: "satoshi_fan",
+    joined: 60,
+    hype: 58,
+    prompt: "Buy and hold Bitcoin and Ethereum forever. Never sell.",
+    strategy: { name: "Diamond Hands", summary: "Buys Bitcoin and Ethereum and never sells.", assets: ["BTC", "ETH"], entry: [], exit: [], rank_by_momentum: null, position_size_pct: 50, max_positions: 2, stop_loss_pct: null, take_profit_pct: null },
   },
   {
-    request: {
-      rawText: "Looking for a photographer for a 120-guest wedding in Miami on June 7, 8 hours coverage, budget around $3,000.",
-      title: "Wedding photographer, 8 hours, 120 guests",
-      category: "Events & weddings",
-      summary: "Couple needs a wedding photographer for 8 hours of coverage at a 120-guest wedding in Miami on June 7. Budget is around $3,000.",
-      location: "Miami",
-      timeline: "June 7",
-      budget: "$3,000",
-      details: [
-        { label: "Guests", value: "120" },
-        { label: "Coverage", value: "8 hours" },
-      ],
-      priceEstimate: { low: 2200, high: 4500, currency: "USD", basis: "Full-day wedding photography in major US cities." },
-    },
-    quotes: [
-      { businessName: "Golden Hour Studio", price: 2950, timeline: "June 7, 8 hours", yearsInBusiness: 9, includes: ["Lead + second shooter", "500+ edited photos", "Online gallery"], message: "We'd love to shoot your day. Engagement session included if you book this month." },
-    ],
-    age: 30,
+    creator: "trendy_tom",
+    joined: 45,
+    hype: 12,
+    prompt: "Buy any coin trading above its 50-day moving average and sell when it falls below it. Put 20% in each coin.",
+    strategy: { name: "Trend Rider", summary: "Owns whatever is trending above its 50-day average.", assets: ALL, entry: [c("price_vs_sma", 50, "above", 0)], exit: [c("price_vs_sma", 50, "below", 0)], rank_by_momentum: null, position_size_pct: 20, max_positions: 5, stop_loss_pct: null, take_profit_pct: null },
+  },
+  {
+    creator: "rsi_ronin",
+    joined: 30,
+    hype: 17,
+    prompt: "Buy Solana, Ethereum or Avalanche when RSI drops below 30 and sell when RSI goes above 65.",
+    strategy: { name: "RSI Sniper", summary: "Snipes oversold alts and sells into strength.", assets: ["SOL", "ETH", "AVAX"], entry: [c("rsi", 14, "below", 30)], exit: [c("rsi", 14, "above", 65)], rank_by_momentum: null, position_size_pct: 33, max_positions: 3, stop_loss_pct: null, take_profit_pct: null },
+  },
+  {
+    creator: "moonboy",
+    joined: 21,
+    hype: 34,
+    prompt: "Buy Dogecoin or Solana when they pump more than 8% in a day. Take profit at 20%, stop loss 7%.",
+    strategy: { name: "Rocket Chaser", summary: "Jumps on big daily pumps with tight risk limits.", assets: ["DOGE", "SOL"], entry: [c("change_pct", 1, "above", 8)], exit: [], rank_by_momentum: null, position_size_pct: 50, max_positions: 2, stop_loss_pct: 7, take_profit_pct: 20 },
+  },
+  {
+    creator: "ma_cross_max",
+    joined: 14,
+    hype: 6,
+    prompt: "Buy Bitcoin when the 20-day average crosses above the 100-day average, sell when it crosses back below. Stop loss 8%.",
+    strategy: { name: "Cross Fire", summary: "Classic moving-average crossover on Bitcoin.", assets: ["BTC"], entry: [c("sma_cross", 20, "above", 0, 100)], exit: [c("sma_cross", 20, "below", 0, 100)], rank_by_momentum: null, position_size_pct: 100, max_positions: 1, stop_loss_pct: 8, take_profit_pct: null },
+  },
+  {
+    creator: "bottomfeeder",
+    joined: 7,
+    hype: 3,
+    prompt: "Buy any coin that is 30% below its 90-day high, take profit at 25%.",
+    strategy: { name: "Bottom Fisher", summary: "Buys coins that have crashed far from their highs.", assets: ALL, entry: [c("drawdown_from_high", 90, "above", 30)], exit: [], rank_by_momentum: null, position_size_pct: 20, max_positions: 5, stop_loss_pct: null, take_profit_pct: 25 },
   },
 ];
 
-export function sampleData() {
-  const requests = [];
-  const quotes = [];
-  for (const sample of SAMPLES) {
-    const requestId = id();
-    requests.push({
-      id: requestId,
-      ownerToken: crypto.randomBytes(24).toString("base64url"),
-      createdAt: hoursAgo(sample.age),
-      status: "open",
-      sample: true,
-      awardedQuoteId: null,
-      analysis: null,
-      contactName: "",
-      ...sample.request,
-    });
-    sample.quotes.forEach((quote, i) => {
-      quotes.push({
-        id: id(),
-        requestId,
-        createdAt: hoursAgo(sample.age - (i + 1) * 0.5),
-        sample: true,
-        currency: "USD",
-        email: "",
-        ...quote,
-      });
-    });
-  }
-  return { requests, quotes };
+export function sampleBots() {
+  return SAMPLES.map((s) => ({
+    id: crypto.randomBytes(6).toString("base64url"),
+    createdAt: new Date(Date.now() - s.joined * 86_400_000).toISOString(),
+    joinedAt: daysAgo(s.joined),
+    sample: true,
+    name: s.strategy.name,
+    creator: s.creator,
+    prompt: s.prompt,
+    strategy: sanitizeStrategy(s.strategy),
+    hype: s.hype,
+    clones: 0,
+    clonedFrom: null,
+  }));
 }

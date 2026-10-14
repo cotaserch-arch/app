@@ -1,25 +1,19 @@
-// A small JSON-file database. Fine for launch and the first few thousand
-// requests; swap for Postgres once traffic justifies it (see README).
+// A small JSON-file database. Fine for launch and the first few thousand bots;
+// move to Postgres once traffic justifies it (see README).
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { sampleData } from "./seed.js";
 
 export function newId(bytes = 6) {
   return crypto.randomBytes(bytes).toString("base64url");
 }
 
-export function tokensMatch(a, b) {
-  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-}
-
-export function createStore(file, { seed = true } = {}) {
+export function createStore(file, { seed } = {}) {
   let db;
   if (file && fs.existsSync(file)) {
     db = JSON.parse(fs.readFileSync(file, "utf8"));
   } else {
-    db = seed ? sampleData() : { requests: [], quotes: [] };
+    db = { bots: seed ? seed() : [], waitlist: [] };
     persist();
   }
 
@@ -32,50 +26,27 @@ export function createStore(file, { seed = true } = {}) {
   }
 
   return {
-    listRequests({ status, category, q } = {}) {
-      const needle = q?.toLowerCase();
-      return db.requests
-        .filter((r) => !status || r.status === status)
-        .filter((r) => !category || r.category === category)
-        .filter((r) => !needle || `${r.title} ${r.summary} ${r.location}`.toLowerCase().includes(needle))
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    },
-    getRequest(id) {
-      return db.requests.find((r) => r.id === id) || null;
-    },
-    createRequest(fields) {
-      const request = {
-        id: newId(),
-        ownerToken: newId(24),
-        createdAt: new Date().toISOString(),
-        status: "open",
-        sample: false,
-        awardedQuoteId: null,
-        analysis: null,
-        ...fields,
-      };
-      db.requests.push(request);
+    bots: () => db.bots,
+    getBot: (id) => db.bots.find((b) => b.id === id) || null,
+    createBot(fields) {
+      const bot = { id: newId(), createdAt: new Date().toISOString(), sample: false, hype: 0, clones: 0, ...fields };
+      db.bots.push(bot);
       persist();
-      return request;
+      return bot;
     },
-    updateRequest(id, changes) {
-      const request = this.getRequest(id);
-      if (!request) return null;
-      Object.assign(request, changes);
+    updateBot(id, changes) {
+      const bot = db.bots.find((b) => b.id === id);
+      if (!bot) return null;
+      Object.assign(bot, typeof changes === "function" ? changes(bot) : changes);
       persist();
-      return request;
+      return bot;
     },
-    quotesFor(requestId) {
-      return db.quotes.filter((q) => q.requestId === requestId).sort((a, b) => a.price - b.price);
-    },
-    quoteCount(requestId) {
-      return db.quotes.reduce((n, q) => n + (q.requestId === requestId ? 1 : 0), 0);
-    },
-    createQuote(fields) {
-      const quote = { id: newId(), createdAt: new Date().toISOString(), sample: false, ...fields };
-      db.quotes.push(quote);
+    addToWaitlist(entry) {
+      const existing = db.waitlist.find((w) => w.email === entry.email);
+      if (existing) Object.assign(existing, entry);
+      else db.waitlist.push({ ...entry, createdAt: new Date().toISOString() });
       persist();
-      return quote;
     },
+    waitlist: () => db.waitlist,
   };
 }

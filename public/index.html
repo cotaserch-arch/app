@@ -2,132 +2,102 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CotaSearch: get quotes for anything</title>
-  <meta name="description" content="Describe anything you need in plain words. Businesses compete with quotes, and AI tells you which one is the best deal.">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Botfolio: build an AI trader in one sentence</title>
+  <meta name="description" content="Describe a crypto trading strategy in plain English. AI builds the bot, tests it on a year of prices, and enters it in a live league against everyone else's bots. Paper money only.">
+  <meta name="theme-color" content="#070b16">
+  <meta property="og:title" content="Botfolio: the AI trading league">
+  <meta property="og:description" content="Build an AI crypto trader in one sentence. Battle the world.">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <link rel="stylesheet" href="/styles.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔎</text></svg>">
 </head>
 <body>
-  <header class="site-header">
-    <div class="wrap">
-      <a class="logo" href="/">Cota<span>Search</span></a>
-      <nav class="nav">
-        <a class="hide-sm" href="#how">How it works</a>
-        <a href="/providers">For businesses</a>
-      </nav>
-    </div>
-  </header>
-
   <main>
     <div class="wrap hero">
-      <span class="eyebrow">Quotes for anything</span>
-      <h1>Tell us what you need. Businesses compete. <em>AI picks the winner.</em></h1>
-      <p class="lede">Moving, repairs, a wedding photographer, 500 custom t-shirts, anything. Describe it in your own words and get competing quotes without a single phone call.</p>
+      <span class="eyebrow"><span class="pulse"></span>AI trading league · Season 1 live</span>
+      <h1>Build an AI trader in one sentence. <span class="grad-text">Battle the world.</span></h1>
+      <p class="lede">Describe any crypto strategy in plain English. AI turns it into a bot, tests it on a year of prices in seconds, and enters it in a live league against everyone else's. Paper money, real bragging rights.</p>
 
-      <form id="ask-form" class="card ask" autocomplete="off">
-        <label for="ask-text">What do you need?</label>
-        <textarea id="ask-text" name="text" maxlength="2000" required placeholder="e.g. Need my 2-bedroom apartment moved from Austin to Dallas next Saturday. 3rd floor with an elevator."></textarea>
-        <div class="chips" style="margin-top:12px" id="examples">
-          <button type="button" class="chip" data-text="Roof is leaking over the kitchen after a storm, need someone to fix it this week in Denver.">🏠 Roof leak</button>
-          <button type="button" class="chip" data-text="500 custom printed t-shirts with a 2-color logo, mixed sizes, needed by March 15.">👕 500 custom t-shirts</button>
-          <button type="button" class="chip" data-text="Brakes are squeaking on my 2018 Honda Civic, need front pads and rotors replaced in Phoenix.">🚗 Car repair</button>
-          <button type="button" class="chip" data-text="Need a website for my bakery with online ordering, about 6 pages, launching in 6 weeks.">💻 Website</button>
+      <form id="build-form" class="card glow builder" autocomplete="off">
+        <label for="idea">Your strategy, in your words</label>
+        <textarea id="idea" maxlength="1500" required placeholder="e.g. Buy Bitcoin when it drops 10% in a week, sell when it's up 15% or falls another 10%."></textarea>
+        <div class="chips" id="templates" style="margin-top:12px"></div>
+        <div class="row" style="margin-top:14px">
+          <div class="status-line" id="mode-line"></div>
+          <button class="btn lg" type="submit" id="build-btn">Build my bot ⚡</button>
         </div>
-        <div class="ask-actions">
-          <span class="mode" id="ai-mode"></span>
-          <button class="btn big" type="submit" id="ask-btn">Get my quotes →</button>
-        </div>
-        <div class="error" id="ask-error" role="alert"></div>
-      </form>
-
-      <form id="draft-form" class="card draft hidden" autocomplete="off">
-        <h2>Here's your request</h2>
-        <p class="muted" id="draft-source"></p>
-
-        <div class="estimate hidden" id="estimate"></div>
-        <div class="missing hidden" id="missing"></div>
-
-        <div class="field">
-          <label for="d-title">Headline</label>
-          <input id="d-title" name="title" maxlength="120" required>
-        </div>
-        <div class="grid-2">
-          <div class="field">
-            <label for="d-category">Category</label>
-            <select id="d-category" name="category"></select>
-          </div>
-          <div class="field">
-            <label for="d-location">Location</label>
-            <input id="d-location" name="location" maxlength="120" placeholder="City or ZIP">
-          </div>
-          <div class="field">
-            <label for="d-timeline">When</label>
-            <input id="d-timeline" name="timeline" maxlength="120" placeholder="e.g. Next Saturday">
-          </div>
-          <div class="field">
-            <label for="d-budget">Budget <span class="hint">(optional)</span></label>
-            <input id="d-budget" name="budget" maxlength="60" placeholder="e.g. $2,000">
-          </div>
-        </div>
-        <div class="field">
-          <label for="d-summary">Details for businesses</label>
-          <textarea id="d-summary" name="summary" maxlength="1000"></textarea>
-        </div>
-        <div class="field details-edit">
-          <label>Key facts</label>
-          <div id="d-details"></div>
-          <button type="button" class="btn secondary small" id="add-detail">+ Add a fact</button>
-        </div>
-        <div class="field">
-          <label for="d-name">Your first name <span class="hint">(optional)</span></label>
-          <input id="d-name" name="contactName" maxlength="60">
-        </div>
-        <div class="ask-actions">
-          <button type="button" class="btn secondary" id="draft-back">← Edit description</button>
-          <button class="btn big" type="submit" id="post-btn">Post request (free)</button>
-        </div>
-        <div class="error" id="draft-error" role="alert"></div>
+        <div class="error" id="build-error" role="alert"></div>
       </form>
     </div>
 
-    <section id="mine-section" class="hidden">
-      <div class="wrap">
-        <div class="section-head"><h2>Your requests</h2></div>
-        <div class="list" id="mine-list"></div>
-      </div>
-    </section>
-
-    <section id="how">
-      <div class="wrap">
-        <div class="section-head"><h2>How it works</h2></div>
-        <div class="steps">
-          <div class="card step">
-            <div class="num">1</div>
-            <h3>Say it like you'd text a friend</h3>
-            <p>AI turns your words into a clear request businesses can price, and flags anything missing so your quotes are accurate.</p>
+    <div class="wrap hidden" id="result">
+      <div class="layout">
+        <div class="stack">
+          <div class="card">
+            <div class="row">
+              <div>
+                <div class="muted small">Your bot</div>
+                <h2 id="r-name" style="margin:2px 0 4px;font-size:1.9rem"></h2>
+                <div class="muted" id="r-summary"></div>
+              </div>
+              <span class="badge" id="r-window"></span>
+            </div>
+            <div id="r-notes" style="margin-top:12px"></div>
+            <div class="grid cols-5" id="r-stats" style="margin:18px 0"></div>
+            <div id="r-chart"></div>
           </div>
-          <div class="card step">
-            <div class="num">2</div>
-            <h3>Businesses compete for you</h3>
-            <p>Local pros and suppliers send their best price. Share your link anywhere to pull in more quotes.</p>
-          </div>
-          <div class="card step">
-            <div class="num">3</div>
-            <h3>AI picks the best deal</h3>
-            <p>Get a side-by-side breakdown, red flags, and a negotiation tip. Then accept with one tap.</p>
-          </div>
+          <div class="card" id="r-coach"><div class="skeleton" style="height:90px"></div></div>
         </div>
+
+        <aside class="stack">
+          <div class="card rules" id="r-rules"></div>
+          <form class="card" id="enter-form" autocomplete="off">
+            <h3>Enter the league 🏁</h3>
+            <p class="muted small">Rules lock when you enter. Your bot starts with $10,000 of paper money and trades live from today.</p>
+            <div style="margin-bottom:12px">
+              <label for="bot-name">Bot name</label>
+              <input id="bot-name" maxlength="40" required>
+            </div>
+            <div style="margin-bottom:14px">
+              <label for="trader">Your trader name</label>
+              <input id="trader" maxlength="24" required placeholder="e.g. moonwalker" pattern="[A-Za-z0-9_.\-]+">
+            </div>
+            <button class="btn" type="submit" id="enter-btn" style="width:100%">Enter the league</button>
+            <button class="btn ghost" type="button" id="tweak-btn" style="width:100%;margin-top:8px">← Tweak the idea</button>
+            <div class="error" id="enter-error" role="alert"></div>
+          </form>
+        </aside>
       </div>
-    </section>
+    </div>
 
     <section>
       <div class="wrap">
+        <div class="grid cols-3" id="highlights"></div>
+      </div>
+    </section>
+
+    <section style="padding-top:0">
+      <div class="wrap">
         <div class="section-head">
-          <h2>Happening now</h2>
-          <a href="/providers">See all open requests →</a>
+          <h2>🏆 The league</h2>
+          <a href="/league">Full standings →</a>
         </div>
-        <div class="list" id="feed"><p class="muted">Loading…</p></div>
+        <div class="card" style="padding:6px" id="board"><div class="skeleton" style="height:240px;margin:16px"></div></div>
+      </div>
+    </section>
+
+    <div class="wrap"><div class="ad-slot" data-slot="home"></div></div>
+
+    <section>
+      <div class="wrap">
+        <div class="section-head"><h2>How it works</h2></div>
+        <div class="grid cols-3 steps">
+          <div class="card"><div class="n">1</div><h3>Say it</h3><p>"Buy Solana when it's oversold, sell when it pumps 20%." AI turns your words into precise trading rules.</p></div>
+          <div class="card"><div class="n">2</div><h3>Test it</h3><p>See how it would have done over the last year vs. just holding Bitcoin, and get graded by the AI coach.</p></div>
+          <div class="card"><div class="n">3</div><h3>Battle</h3><p>Enter the league, climb the leaderboard, earn badges, and challenge any bot to a head-to-head battle.</p></div>
+        </div>
       </div>
     </section>
 
@@ -135,22 +105,14 @@
       <div class="wrap">
         <div class="cta-band">
           <div>
-            <h2>Run a business?</h2>
-            <p>Get customers who already want to buy. Browse requests and quote in 60 seconds.</p>
+            <h2>Go Pro 🚀</h2>
+            <p>Run up to 10 bots, get instant trade alerts, deep AI reviews and private leagues with friends.</p>
           </div>
-          <a class="btn big" href="/providers">Find customers →</a>
+          <a class="btn lg" href="/pro">See Pro →</a>
         </div>
       </div>
     </section>
   </main>
-
-  <footer>
-    <div class="wrap">
-      <span>© CotaSearch</span>
-      <span>Free for buyers. Always.</span>
-    </div>
-  </footer>
-
   <script type="module" src="/js/home.js"></script>
 </body>
 </html>

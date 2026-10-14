@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Bot · Botfolio</title>
+  <meta name="theme-color" content="#070b16">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="wrap">
+    <div id="loading" class="empty"><span class="spinner"></span></div>
+    <div id="missing" class="empty hidden"><h2>Bot not found</h2><p><a href="/league">Back to the league →</a></p></div>
+
+    <div id="page" class="hidden">
+      <div id="banner" style="margin-top:24px"></div>
+      <div class="row" style="padding:28px 0 18px;align-items:flex-end">
+        <div>
+          <div class="row" style="justify-content:flex-start;gap:8px" id="tags"></div>
+          <h1 id="name" style="font-size:clamp(2rem,5vw,3rem);margin:10px 0 4px"></h1>
+          <div class="muted" id="byline"></div>
+        </div>
+        <div style="text-align:right">
+          <div class="muted small">Since joining the league</div>
+          <div class="big-num" id="ret"></div>
+          <div class="muted small num" id="equity"></div>
+        </div>
+      </div>
+
+      <div class="row" style="justify-content:flex-start;gap:8px;margin-bottom:18px">
+        <button class="btn" id="hype-btn">🔥 Hype</button>
+        <a class="btn ghost" id="clone-btn">🧬 Clone</a>
+        <a class="btn ghost" id="battle-btn">⚔️ Battle</a>
+        <button class="btn ghost" id="share-btn">🔗 Share</button>
+      </div>
+
+      <div class="achievements" id="badges" style="margin-bottom:20px"></div>
+
+      <div class="layout">
+        <div class="stack">
+          <div class="card">
+            <div class="section-head" style="margin-bottom:10px"><h3 style="margin:0">Live performance</h3><span class="badge" id="live-window"></span></div>
+            <div class="grid cols-5" id="live-stats" style="margin-bottom:16px"></div>
+            <div id="live-chart"></div>
+          </div>
+
+          <div class="card" id="coach">
+            <div class="row">
+              <div><strong>AI Coach</strong><div class="muted small">Get a grade and tips based on this bot's last year.</div></div>
+              <button class="btn sm" id="coach-btn">Review this bot ✨</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Recent trades</h3>
+            <div class="table-wrap"><table class="board" id="trades"></table></div>
+          </div>
+
+          <div class="card">
+            <div class="section-head" style="margin-bottom:10px"><h3 style="margin:0">Last year, replayed</h3><span class="badge">Backtest</span></div>
+            <p class="muted small">How these exact rules would have traded over the past year. Useful for judging the idea, but backtests aren't predictions, which is why the league only ranks live results.</p>
+            <div class="grid cols-5" id="bt-stats" style="margin-bottom:16px"></div>
+            <div id="bt-chart"></div>
+          </div>
+        </div>
+
+        <aside class="stack">
+          <div class="card rules" id="rules"></div>
+          <div class="card" id="prompt-card"><h3>The original idea</h3><p class="muted" id="prompt" style="font-style:italic;margin:0"></p></div>
+          <div class="card"><h3>Holding now</h3><div id="holdings"></div></div>
+          <div class="ad-slot" data-slot="bot"></div>
+        </aside>
+      </div>
+    </div>
+  </main>
+  <script type="module" src="/js/bot.js"></script>
+</body>
+</html>

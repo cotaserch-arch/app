@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Bot Battle · Botfolio</title>
+  <meta name="description" content="Pit any two AI trading bots head-to-head on the same prices.">
+  <meta name="theme-color" content="#070b16">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="wrap">
+    <div class="hero" style="padding-bottom:20px">
+      <span class="eyebrow">⚔️ Head to head</span>
+      <h1>Bot <span class="grad-text">Battle</span></h1>
+      <p class="lede" style="margin-bottom:0">Pick any two bots. Same prices, same starting cash, same window. Only one walks away the winner.</p>
+    </div>
+
+    <form class="card" id="pick" style="margin-bottom:20px">
+      <div class="grid cols-3" style="align-items:end">
+        <div><label for="a">Fighter 1</label><select id="a"></select></div>
+        <div><label for="b">Fighter 2</label><select id="b"></select></div>
+        <div>
+          <label>Battle window</label>
+          <div class="tabs" id="days" style="width:100%">
+            <button type="button" class="tab" data-days="30">30d</button>
+            <button type="button" class="tab active" data-days="90">90d</button>
+            <button type="button" class="tab" data-days="365">1 year</button>
+          </div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <span class="muted small">Battles replay both bots' rules over the same recent prices.</span>
+        <button class="btn" type="submit" id="fight-btn">Fight! ⚔️</button>
+      </div>
+      <div class="error" id="err" role="alert"></div>
+    </form>
+
+    <div id="arena" class="hidden stack">
+      <div class="card glow">
+        <div class="vs" id="vs"></div>
+      </div>
+      <div class="card">
+        <h3>Round by round</h3>
+        <div id="chart"></div>
+      </div>
+      <div class="grid cols-2" id="compare"></div>
+      <div class="row" style="justify-content:center"><button class="btn ghost" id="share-btn">🔗 Share this battle</button></div>
+    </div>
+
+    <div class="ad-slot" data-slot="battle" style="margin-top:20px"></div>
+  </main>
+  <script type="module" src="/js/battle.js"></script>
+</body>
+</html>

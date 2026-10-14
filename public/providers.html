@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Find customers · CotaSearch</title>
+  <meta name="description" content="Browse open requests from people ready to buy and send your quote in 60 seconds.">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔎</text></svg>">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="logo" href="/">Cota<span>Search</span></a>
+      <nav class="nav">
+        <a href="/">Get quotes</a>
+        <a href="/providers">For businesses</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap hero" style="padding-bottom:24px">
+      <span class="eyebrow">For businesses</span>
+      <h1>Customers who <em>already want to buy.</em></h1>
+      <p class="lede">Every request here is someone ready to hire. No cold calls, no ads. Send your best price in 60 seconds. Free during launch.</p>
+    </div>
+
+    <div class="wrap">
+      <div class="filters">
+        <input id="search" type="search" placeholder="Search requests, e.g. 'roof' or 'Dallas'" aria-label="Search requests">
+        <select id="category" aria-label="Category"><option value="">All categories</option></select>
+      </div>
+      <div class="list" id="list"><p class="muted">Loading…</p></div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span>© CotaSearch</span>
+      <span>Free for businesses during launch.</span>
+    </div>
+  </footer>
+
+  <script type="module" src="/js/providers.js"></script>
+</body>
+</html>

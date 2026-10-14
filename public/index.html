@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CotaSearch: get quotes for anything</title>
+  <meta name="description" content="Describe anything you need in plain words. Businesses compete with quotes, and AI tells you which one is the best deal.">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔎</text></svg>">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="logo" href="/">Cota<span>Search</span></a>
+      <nav class="nav">
+        <a class="hide-sm" href="#how">How it works</a>
+        <a href="/providers">For businesses</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap hero">
+      <span class="eyebrow">Quotes for anything</span>
+      <h1>Tell us what you need. Businesses compete. <em>AI picks the winner.</em></h1>
+      <p class="lede">Moving, repairs, a wedding photographer, 500 custom t-shirts, anything. Describe it in your own words and get competing quotes without a single phone call.</p>
+
+      <form id="ask-form" class="card ask" autocomplete="off">
+        <label for="ask-text">What do you need?</label>
+        <textarea id="ask-text" name="text" maxlength="2000" required placeholder="e.g. Need my 2-bedroom apartment moved from Austin to Dallas next Saturday. 3rd floor with an elevator."></textarea>
+        <div class="chips" style="margin-top:12px" id="examples">
+          <button type="button" class="chip" data-text="Roof is leaking over the kitchen after a storm, need someone to fix it this week in Denver.">🏠 Roof leak</button>
+          <button type="button" class="chip" data-text="500 custom printed t-shirts with a 2-color logo, mixed sizes, needed by March 15.">👕 500 custom t-shirts</button>
+          <button type="button" class="chip" data-text="Brakes are squeaking on my 2018 Honda Civic, need front pads and rotors replaced in Phoenix.">🚗 Car repair</button>
+          <button type="button" class="chip" data-text="Need a website for my bakery with online ordering, about 6 pages, launching in 6 weeks.">💻 Website</button>
+        </div>
+        <div class="ask-actions">
+          <span class="mode" id="ai-mode"></span>
+          <button class="btn big" type="submit" id="ask-btn">Get my quotes →</button>
+        </div>
+        <div class="error" id="ask-error" role="alert"></div>
+      </form>
+
+      <form id="draft-form" class="card draft hidden" autocomplete="off">
+        <h2>Here's your request</h2>
+        <p class="muted" id="draft-source"></p>
+
+        <div class="estimate hidden" id="estimate"></div>
+        <div class="missing hidden" id="missing"></div>
+
+        <div class="field">
+          <label for="d-title">Headline</label>
+          <input id="d-title" name="title" maxlength="120" required>
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="d-category">Category</label>
+            <select id="d-category" name="category"></select>
+          </div>
+          <div class="field">
+            <label for="d-location">Location</label>
+            <input id="d-location" name="location" maxlength="120" placeholder="City or ZIP">
+          </div>
+          <div class="field">
+            <label for="d-timeline">When</label>
+            <input id="d-timeline" name="timeline" maxlength="120" placeholder="e.g. Next Saturday">
+          </div>
+          <div class="field">
+            <label for="d-budget">Budget <span class="hint">(optional)</span></label>
+            <input id="d-budget" name="budget" maxlength="60" placeholder="e.g. $2,000">
+          </div>
+        </div>
+        <div class="field">
+          <label for="d-summary">Details for businesses</label>
+          <textarea id="d-summary" name="summary" maxlength="1000"></textarea>
+        </div>
+        <div class="field details-edit">
+          <label>Key facts</label>
+          <div id="d-details"></div>
+          <button type="button" class="btn secondary small" id="add-detail">+ Add a fact</button>
+        </div>
+        <div class="field">
+          <label for="d-name">Your first name <span class="hint">(optional)</span></label>
+          <input id="d-name" name="contactName" maxlength="60">
+        </div>
+        <div class="ask-actions">
+          <button type="button" class="btn secondary" id="draft-back">← Edit description</button>
+          <button class="btn big" type="submit" id="post-btn">Post request (free)</button>
+        </div>
+        <div class="error" id="draft-error" role="alert"></div>
+      </form>
+    </div>
+
+    <section id="mine-section" class="hidden">
+      <div class="wrap">
+        <div class="section-head"><h2>Your requests</h2></div>
+        <div class="list" id="mine-list"></div>
+      </div>
+    </section>
+
+    <section id="how">
+      <div class="wrap">
+        <div class="section-head"><h2>How it works</h2></div>
+        <div class="steps">
+          <div class="card step">
+            <div class="num">1</div>
+            <h3>Say it like you'd text a friend</h3>
+            <p>AI turns your words into a clear request businesses can price, and flags anything missing so your quotes are accurate.</p>
+          </div>
+          <div class="card step">
+            <div class="num">2</div>
+            <h3>Businesses compete for you</h3>
+            <p>Local pros and suppliers send their best price. Share your link anywhere to pull in more quotes.</p>
+          </div>
+          <div class="card step">
+            <div class="num">3</div>
+            <h3>AI picks the best deal</h3>
+            <p>Get a side-by-side breakdown, red flags, and a negotiation tip. Then accept with one tap.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Happening now</h2>
+          <a href="/providers">See all open requests →</a>
+        </div>
+        <div class="list" id="feed"><p class="muted">Loading…</p></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="cta-band">
+          <div>
+            <h2>Run a business?</h2>
+            <p>Get customers who already want to buy. Browse requests and quote in 60 seconds.</p>
+          </div>
+          <a class="btn big" href="/providers">Find customers →</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span>© CotaSearch</span>
+      <span>Free for buyers. Always.</span>
+    </div>
+  </footer>
+
+  <script type="module" src="/js/home.js"></script>
+</body>
+</html>

@@ -12,6 +12,7 @@ export const DAILY_BONUS = 100;
 export const REFERRAL_BONUS = 500;
 export const MAX_TRADE = 5000;
 export const REACTIONS = ["🔥", "😱", "😂", "👏", "💀", "🐐"];
+export const MAX_GROUP_MEMBERS = 200;
 
 export class GameError extends Error {
   constructor(status, message) {
@@ -89,6 +90,7 @@ export function createLeague({ store, sports, ai, pusher = null, now = () => Dat
     for (const [key, p] of Object.entries(db.positions)) if (p.fanId === fan.id) delete db.positions[key];
     for (const [id, b] of Object.entries(db.bots)) if (b.ownerId === fan.id) delete db.bots[id];
     for (const [gameId, msgs] of Object.entries(db.messages)) db.messages[gameId] = msgs.filter((m) => m.fanId !== fan.id);
+    for (const g of Object.values(db.groups)) g.members = g.members.filter((id) => id !== fan.id);
     tokenIndex.delete(fan.token);
     delete db.fans[fan.id];
     botCache.results.clear();
@@ -414,6 +416,53 @@ export function createLeague({ store, sports, ai, pusher = null, now = () => Dat
       .map((p, i) => ({ ...p, rank: i + 1 }));
   }
 
+  // ---------- Friend leagues ----------
+  // Private standings for a group of fans. Only picks on games that start
+  // after someone joins count, so everyone starts level.
+
+  function createGroup(fan, rawName) {
+    const name = String(rawName || "").replace(/\s+/g, " ").trim().slice(0, 40);
+    if (name.length < 2) throw new GameError(400, "Give your league a name.");
+    const owned = Object.values(db.groups).filter((g) => g.ownerId === fan.id).length;
+    if (owned >= 20) throw new GameError(400, "You can run up to 20 leagues.");
+    const at = new Date(now()).toISOString();
+    const group = { id: newId(), name, ownerId: fan.id, createdAt: at, members: [fan.id], joinedAt: { [fan.id]: at } };
+    db.groups[group.id] = group;
+    store.save();
+    return group;
+  }
+
+  function joinGroup(fan, group) {
+    if (group.members.includes(fan.id)) return;
+    if (group.members.length >= MAX_GROUP_MEMBERS) throw new GameError(409, "This league is full.");
+    group.members.push(fan.id);
+    (group.joinedAt ||= {})[fan.id] = new Date(now()).toISOString();
+    store.save();
+  }
+
+  function leaveGroup(fan, group) {
+    group.members = group.members.filter((id) => id !== fan.id);
+    store.save();
+  }
+
+  function groupStandings(group) {
+    gradePicks();
+    const grouped = picksByFan();
+    return group.members
+      .map((id) => db.fans[id])
+      .filter(Boolean)
+      .map((fan) => {
+        const since = group.joinedAt?.[fan.id] ?? group.createdAt;
+        const picks = (grouped.get(fan.id) || []).filter((p) => (p.startsAt ?? sports.game(p.gameId)?.startsAt ?? "") >= since);
+        const stats = statsFrom(picks);
+        return { id: fan.id, handle: fan.handle, sample: fan.sample, stats, owner: fan.id === group.ownerId };
+      })
+      .sort((a, b) => b.stats.points - a.stats.points || (b.stats.accuracy ?? 0) - (a.stats.accuracy ?? 0) || a.handle.localeCompare(b.handle))
+      .map((r, i) => ({ ...r, rank: i + 1 }));
+  }
+
+  const groupsOf = (fan) => Object.values(db.groups).filter((g) => g.members.includes(fan.id));
+
   // ---------- Betting bots ----------
 
   function createBot(fan, { name, prompt, rules, sample = false, createdAt = null }) {
@@ -568,6 +617,11 @@ export function createLeague({ store, sports, ai, pusher = null, now = () => Dat
     profile,
     pickers,
     traders,
+    createGroup,
+    joinGroup,
+    leaveGroup,
+    groupStandings,
+    groupsOf,
     createBot,
     botResult,
     backtest,

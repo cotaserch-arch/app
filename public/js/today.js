@@ -2,8 +2,14 @@ import {
   $, api, config, ensureFan, escapeHtml, localDate, me, ml, rankLabel, refreshCoins, renderShell, share, statusLabel,
   teamLogo, toast,
 } from "./common.js";
+import { createGroupFrom } from "./groups.js";
 
 renderShell("today");
+
+$("group-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  createGroupFrom($("group-name"));
+});
 
 let day = 0;
 let sport = "";

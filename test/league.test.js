@@ -277,6 +277,47 @@ test("reported messages disappear after three reports", async () => {
   assert.equal(admin.data.reportedMessages[0].reports, 3);
 });
 
+test("friend leagues: create, join, standings from join time, leave", async () => {
+  const owner = (await call("/api/fans", { method: "POST", body: { handle: "league_boss" } })).data.token;
+  const friend = (await call("/api/fans", { method: "POST", body: { handle: "league_pal" } })).data.token;
+  assert.equal((await call("/api/groups", { method: "POST", token: owner, body: { name: " " } })).status, 400);
+  const { id } = (await call("/api/groups", { method: "POST", token: owner, body: { name: "Sunday   Squad" } })).data;
+  assert.equal((await call(`/api/groups/${id}/join`, { method: "POST", body: {} })).status, 401);
+  assert.equal((await call(`/api/groups/${id}/join`, { method: "POST", token: friend, body: {} })).status, 200);
+
+  // Both pick a future game; the owner's pick wins.
+  const g = sports.games().find((x) => x.status === "scheduled" && x.startsAt > "2026-10-15T06");
+  await call(`/api/games/${g.id}/pick`, { method: "POST", token: owner, body: { side: "home" } });
+  await call(`/api/games/${g.id}/pick`, { method: "POST", token: friend, body: { side: "away" } });
+  sports.finish(g.id, 3, 1);
+
+  const view = await call(`/api/groups/${id}`, { token: friend });
+  assert.equal(view.data.group.name, "Sunday Squad");
+  assert.equal(view.data.group.members, 2);
+  assert.equal(view.data.isMember, true);
+  assert.deepEqual(view.data.standings.map((r) => [r.handle, r.rank, r.stats.graded]), [["league_boss", 1, 1], ["league_pal", 2, 1]]);
+  assert.ok(view.data.standings[0].stats.points >= 10);
+
+  const me = await call("/api/me", { token: friend });
+  assert.deepEqual(me.data.groups.map((x) => [x.name, x.rank]), [["Sunday Squad", 2]]);
+  await call(`/api/groups/${id}/leave`, { method: "POST", token: friend, body: {} });
+  assert.equal((await call(`/api/groups/${id}`)).data.group.members, 1);
+  assert.equal((await call("/api/groups/nope")).status, 404);
+});
+
+test("shared links get a specific title, description and image", async () => {
+  const g = sports.games().find((x) => x.status === "scheduled");
+  const html = await (await fetch(`${base}/game/${g.id}`)).text();
+  assert.match(html, new RegExp(`<title>${g.away.short} @ ${g.home.short} · Clutch</title>`));
+  assert.match(html, /<meta property="og:description" content="The AI picks the [^"]+\(\d+%\)\. Think you can beat it\?/);
+  assert.match(html, /<meta property="og:image" content="http:\/\/127\.0\.0\.1:\d+\/icons\/og\.png">/);
+  assert.equal((html.match(/property="og:title"/g) || []).length, 1, "no duplicate tags");
+  const home = await (await fetch(`${base}/`)).text();
+  assert.match(home, /<meta name="twitter:card" content="summary_large_image">/);
+  const missing = await fetch(`${base}/l/does-not-exist`);
+  assert.equal(missing.status, 200, "unknown ids still load the page, which shows not-found");
+});
+
 test("health check", async () => {
   const { status, data } = await call("/api/health");
   assert.equal(status, 200);
@@ -284,7 +325,7 @@ test("health check", async () => {
 });
 
 test("serves every page", async () => {
-  for (const path of ["/", "/bots", "/leaders", "/pro", "/me", "/privacy", "/game/x", "/bot/x", "/manifest.webmanifest", "/sw.js"]) {
+  for (const path of ["/", "/bots", "/leaders", "/pro", "/me", "/privacy", "/game/x", "/bot/x", "/l/x", "/manifest.webmanifest", "/sw.js", "/icons/og.png"]) {
     assert.equal((await fetch(base + path)).status, 200, path);
   }
 });

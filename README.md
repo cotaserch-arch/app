@@ -9,7 +9,7 @@
 | 🎰 **Betting-bot league** | Describe a strategy in one sentence. AI builds the bot, backtests it on the last 30 days, and it bets on every matching game from then on. |
 | 📺 **Watch parties** | A live room per game: score, AI play-by-play calls, fan chat, reactions, viewer count. |
 
-Plus daily coins, referral bonuses, badges, three leaderboards, share links, an installable app with offline support, and an iPhone/Android app with push notifications.
+Plus **friend leagues** (private standings with an invite link), daily coins, referral bonuses, badges, three leaderboards, rich link previews for every shared game, bot and league, an installable app with offline support, and an iPhone/Android app with push notifications.
 
 > Free to play. Coins can't be bought, sold or cashed out. Clutch is not a sportsbook.
 
@@ -110,6 +110,8 @@ test/              npm test
 | POST | `/api/bots/compile` · `/api/bots/backtest` · `/api/bots` | Build, test and enter a bot |
 | GET | `/api/bots/:id` | Bot profile |
 | GET | `/api/leaderboard?board=pickers\|traders\|bots` | Standings |
+| POST | `/api/groups` · `/api/groups/:id/join` · `/leave` | Create, join or leave a friend league |
+| GET | `/api/groups/:id` | Friend-league standings (picks after each member joined) |
 | POST | `/api/waitlist` | Pro, partner and sponsor leads |
 
 ## Tests

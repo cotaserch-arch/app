@@ -21,6 +21,7 @@ const EMPTY = () => ({
   positions: {}, // `${fanId}:${marketId}:${outcome}` -> position
   messages: {}, // gameId -> [message]
   previews: {}, // gameId -> preview (locked before kickoff)
+  groups: {}, // id -> private friend league
   waitlist: [],
 });
 

@@ -29,6 +29,14 @@
           <div class="card"><h3>Recent picks</h3><div class="table-wrap"><table class="board" id="picks"></table></div></div>
           <div class="card"><h3>Market positions</h3><div class="table-wrap"><table class="board" id="positions"></table></div></div>
           <div class="card"><h3>My bots</h3><div id="bots"></div></div>
+          <div class="card">
+            <h3>👥 My leagues</h3>
+            <div id="groups"></div>
+            <form id="group-form" class="row" style="margin-top:10px;flex-wrap:nowrap">
+              <input id="group-name" maxlength="40" placeholder="New league name" aria-label="League name">
+              <button class="btn sm" type="submit">Create</button>
+            </form>
+          </div>
         </div>
         <aside class="stack">
           <div class="card">
@@ -58,6 +66,11 @@
   </main>
   <script type="module">
     import { $, api, badgesHtml, ensureFan, escapeHtml, me, renderShell, setToken, share, signed, toast } from "/js/common.js";
+    import { createGroupFrom } from "/js/groups.js";
+    $("group-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      createGroupFrom($("group-name"));
+    });
     renderShell("");
     const tile = (label, value) => `<div class="stat"><div class="label">${label}</div><div class="value">${value}</div></div>`;
     async function load() {
@@ -90,6 +103,9 @@
       $("bots").innerHTML = data.bots.length
         ? data.bots.map((b) => `<div class="row" style="padding:6px 0"><a href="/bot/${encodeURIComponent(b.id)}"><b>${escapeHtml(b.name)}</b></a><span class="num ${b.stats.profit >= 0 ? "up" : "down"}">${signed(b.stats.profit)}</span></div>`).join("")
         : '<p class="muted small" style="margin:0"><a href="/bots">Build your first betting bot →</a></p>';
+      $("groups").innerHTML = data.groups.length
+        ? data.groups.map((g) => `<div class="row" style="padding:6px 0"><a href="/l/${encodeURIComponent(g.id)}"><b>${escapeHtml(g.name)}</b></a><span class="small muted">${g.rank ? `#${g.rank} of ${g.members}` : `${g.members} fans`}</span></div>`).join("")
+        : '<p class="muted small" style="margin:0">No leagues yet. Start one and invite your friends.</p>';
       $("code").textContent = data.token;
       $("page").classList.remove("hidden");
       $("invite").onclick = () => share({ title: "Clutch", text: "Think you can beat the AI at sports? Join me on Clutch and we both get 500 coins.", url: `${location.origin}/?ref=${encodeURIComponent(p.id)}` });

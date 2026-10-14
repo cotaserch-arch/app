@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
@@ -67,6 +68,11 @@ export function createApp({ league, sports, ai = defaultAi, store, limits = {}, 
     const game = sports.game(id);
     if (!game) throw new GameError(404, "Game not found.");
     return game;
+  }
+  function loadGroup(id) {
+    const group = store.db.groups[id];
+    if (!group) throw new GameError(404, "League not found.");
+    return group;
   }
   function loadBot(id) {
     const bot = store.db.bots[id];
@@ -173,7 +179,13 @@ export function createApp({ league, sports, ai = defaultAi, store, limits = {}, 
     const bots = Object.values(store.db.bots)
       .filter((b) => b.ownerId === fan.id)
       .map((b) => ({ id: b.id, name: b.name, stats: league.botResult(b).stats }));
-    res.json({ profile, token: fan.token, picks, positions, bots });
+    const groups = league.groupsOf(fan).map((g) => ({
+      id: g.id,
+      name: g.name,
+      members: g.members.length,
+      rank: league.groupStandings(g).find((r) => r.id === fan.id)?.rank ?? null,
+    }));
+    res.json({ profile, token: fan.token, picks, positions, bots, groups });
   });
 
   app.delete("/api/me", writeLimit, (req, res) => {
@@ -264,6 +276,34 @@ export function createApp({ league, sports, ai = defaultAi, store, limits = {}, 
     res.json({ reactions: league.react(game, req.body?.emoji, fanOf(req)?.id ?? req.ip) });
   });
 
+  // ---------- Friend leagues ----------
+
+  app.post("/api/groups", writeLimit, (req, res) => {
+    const group = league.createGroup(requireFan(req), req.body?.name);
+    res.status(201).json({ id: group.id });
+  });
+
+  app.get("/api/groups/:id", (req, res) => {
+    const group = loadGroup(req.params.id);
+    const fan = fanOf(req);
+    res.json({
+      group: { id: group.id, name: group.name, createdAt: group.createdAt, members: group.members.length, owner: store.db.fans[group.ownerId]?.handle ?? null },
+      standings: league.groupStandings(group),
+      isMember: !!fan && group.members.includes(fan.id),
+      botRecord: league.botRecord(7),
+    });
+  });
+
+  app.post("/api/groups/:id/join", writeLimit, (req, res) => {
+    league.joinGroup(requireFan(req), loadGroup(req.params.id));
+    res.json({ ok: true });
+  });
+
+  app.post("/api/groups/:id/leave", writeLimit, (req, res) => {
+    league.leaveGroup(requireFan(req), loadGroup(req.params.id));
+    res.json({ ok: true });
+  });
+
   // ---------- Betting bots ----------
 
   app.post("/api/bots/compile", aiLimit, async (req, res) => {
@@ -345,8 +385,76 @@ export function createApp({ league, sports, ai = defaultAi, store, limits = {}, 
     res.type("text").send(`google.com, ${env.ADSENSE_CLIENT.replace(/^ca-/, "")}, DIRECT, f08c47fec0942fa0\n`);
   });
 
-  app.get("/game/:id", (req, res) => res.sendFile(path.join(publicDir, "game.html")));
-  app.get("/bot/:id", (req, res) => res.sendFile(path.join(publicDir, "bot.html")));
+  // ---------- Pages with link previews ----------
+  // Shared links show a title, description and image in chats and social apps.
+
+  const templates = new Map();
+  const attr = (v) => String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  function sendPage(req, res, file, { title, description }) {
+    if (!templates.has(file)) templates.set(file, fs.readFileSync(path.join(publicDir, file), "utf8"));
+    const origin = `${req.protocol}://${req.get("host")}`;
+    const tags = [
+      `<title>${attr(title)}</title>`,
+      `<meta name="description" content="${attr(description)}">`,
+      `<meta property="og:type" content="website">`,
+      `<meta property="og:site_name" content="${APP_NAME}">`,
+      `<meta property="og:title" content="${attr(title)}">`,
+      `<meta property="og:description" content="${attr(description)}">`,
+      `<meta property="og:url" content="${attr(origin + req.originalUrl)}">`,
+      `<meta property="og:image" content="${origin}/icons/og.png">`,
+      `<meta property="og:image:width" content="1200">`,
+      `<meta property="og:image:height" content="630">`,
+      `<meta name="twitter:card" content="summary_large_image">`,
+    ].join("\n  ");
+    // Drop the page's static tags first, then put the specific ones in place of <title>.
+    const html = templates
+      .get(file)
+      .replace(/\s*<meta (name="description"|property="og:[a-z:]+") content="[^"]*">/g, "")
+      .replace(/<title>[^<]*<\/title>/, tags);
+    res.type("html").send(html);
+  }
+
+  const DEFAULT_META = {
+    title: "Clutch: can you beat the AI at sports?",
+    description: "Free daily sports picks against an AI, a fan prediction market, betting-bot battles and live watch parties. All in one app.",
+  };
+
+  app.get("/", (req, res) => sendPage(req, res, "index.html", DEFAULT_META));
+
+  app.get("/game/:id", (req, res) => {
+    const g = sports.game(req.params.id);
+    if (!g) return sendPage(req, res, "game.html", DEFAULT_META);
+    const p = league.preview(g);
+    const pick = g[p.pick].short;
+    const matchup = `${g.away.short} @ ${g.home.short}`;
+    const description =
+      g.status === "scheduled"
+        ? `The AI picks the ${pick} (${p.win_probability}%). Think you can beat it? Make your pick on Clutch.`
+        : g.status === "live"
+          ? `LIVE: ${g.away.short} ${g.away.score}, ${g.home.short} ${g.home.score} (${g.clock}). Join the watch party on Clutch.`
+          : `Final: ${g.away.short} ${g.away.score}, ${g.home.short} ${g.home.score}. The AI picked the ${pick} ${g.winner === p.pick ? "✅" : "❌"}.`;
+    sendPage(req, res, "game.html", { title: `${matchup} · Clutch`, description });
+  });
+
+  app.get("/bot/:id", (req, res) => {
+    const bot = store.db.bots[req.params.id];
+    if (!bot) return sendPage(req, res, "bot.html", DEFAULT_META);
+    const { profit } = league.botResult(bot).stats;
+    sendPage(req, res, "bot.html", {
+      title: `${bot.name} by @${bot.creator} · Clutch`,
+      description: `${bot.rules.summary} Profit so far: ${profit >= 0 ? "+" : ""}${profit} coins. Build a bot that beats it on Clutch.`,
+    });
+  });
+
+  app.get("/l/:id", (req, res) => {
+    const group = store.db.groups[req.params.id];
+    if (!group) return sendPage(req, res, "group.html", DEFAULT_META);
+    sendPage(req, res, "group.html", {
+      title: `Join ${group.name} on Clutch`,
+      description: `${group.members.length} fan${group.members.length === 1 ? "" : "s"} competing to beat the AI at sports. Free to play. Tap to join.`,
+    });
+  });
+
   app.use(express.static(publicDir, { extensions: ["html"] }));
 
   app.use((err, req, res, next) => {

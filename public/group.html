@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Friend league · Clutch</title>
+  <meta name="theme-color" content="#05080f">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="wrap">
+    <div id="loading" class="empty"><span class="spinner"></span></div>
+    <div id="missing" class="empty hidden"><h2>League not found</h2><p><a href="/">Back to today's games →</a></p></div>
+    <div id="page" class="hidden">
+      <div id="banner" style="margin-top:20px"></div>
+      <div class="hero">
+        <span class="eyebrow">👥 Friend league</span>
+        <h1 id="name"></h1>
+        <p class="muted" id="meta" style="margin:0"></p>
+      </div>
+      <div class="row start" style="gap:8px;margin-bottom:18px">
+        <button class="btn" id="join-league-btn">Join this league</button>
+        <button class="btn hidden" id="invite-btn">📨 Invite friends</button>
+        <a class="btn ghost" href="/">Make today's picks →</a>
+        <button class="btn ghost sm hidden" id="leave-btn">Leave</button>
+      </div>
+      <div class="layout">
+        <div class="card" style="padding:6px" id="standings"></div>
+        <aside class="stack">
+          <div class="card">
+            <h3>How it works</h3>
+            <ul class="small muted" style="margin:0;padding-left:18px">
+              <li>Pick winners on the Today screen like always.</li>
+              <li>Picks on games that start after you join count here: 10 points a win, +5 for an upset.</li>
+              <li>The Bot's record shows who's actually beating the AI.</li>
+            </ul>
+          </div>
+          <form class="card" id="create-form">
+            <h3>Start your own league</h3>
+            <input id="create-name" maxlength="40" placeholder="e.g. Office Pick'em" aria-label="League name">
+            <button class="btn ghost block" style="margin-top:8px" type="submit">Create league</button>
+          </form>
+          <div class="ad-slot" data-slot="group"></div>
+        </aside>
+      </div>
+    </div>
+  </main>
+  <script type="module">
+    import { $, api, ensureFan, escapeHtml, me, rankLabel, renderShell, share, toast } from "/js/common.js";
+    import { createGroupFrom } from "/js/groups.js";
+    renderShell("leaders");
+    const id = decodeURIComponent(location.pathname.split("/")[2] || "");
+    let data = null;
+
+    async function load() {
+      try {
+        data = await api(`/api/groups/${encodeURIComponent(id)}`);
+      } catch {
+        $("loading").classList.add("hidden");
+        $("missing").classList.remove("hidden");
+        return;
+      }
+      const { group, standings, isMember, botRecord } = data;
+      document.title = `${group.name} · Clutch`;
+      $("name").textContent = group.name;
+      $("meta").textContent = `${group.members} fan${group.members === 1 ? "" : "s"}${group.owner ? ` · started by @${group.owner}` : ""} · 🤖 The Bot is ${botRecord.won}-${botRecord.lost} this week`;
+      if (new URLSearchParams(location.search).get("new") === "1") {
+        $("banner").innerHTML = `<div class="card glow">🎉 <b>Your league is ready.</b> Send the invite link to your friends. Standings fill in as games finish.</div>`;
+      }
+      $("join-league-btn").classList.toggle("hidden", isMember);
+      $("invite-btn").classList.toggle("hidden", !isMember);
+      $("leave-btn").classList.toggle("hidden", !isMember);
+      $("standings").innerHTML = `<div class="table-wrap"><table class="board">
+        <thead><tr><th>Rank</th><th>Fan</th><th class="r">Points</th><th class="r hide-sm">Record</th><th class="r">vs Bot</th></tr></thead>
+        <tbody>${standings
+          .map((r) => `<tr><td class="rank">${rankLabel(r.rank)}</td><td><b>${escapeHtml(r.handle)}</b>${r.owner ? " 👑" : ""}<div class="small muted">🔥 ${r.stats.streak} streak</div></td><td class="r num"><b>${r.stats.points}</b></td><td class="r num hide-sm">${r.stats.correct}-${r.stats.graded - r.stats.correct}</td><td class="r num ${r.stats.vsBot.you >= r.stats.vsBot.bot ? "up" : "down"}">${r.stats.vsBot.you}-${r.stats.vsBot.bot}</td></tr>`)
+          .join("")}</tbody></table></div>`;
+      $("loading").classList.add("hidden");
+      $("page").classList.remove("hidden");
+    }
+
+    $("join-league-btn").addEventListener("click", async () => {
+      if (!(await ensureFan())) return;
+      try {
+        await api(`/api/groups/${encodeURIComponent(id)}/join`, { method: "POST", body: {} });
+        toast(`You're in ${data.group.name}! 🎉`);
+        load();
+      } catch (err) {
+        toast(err.message);
+      }
+    });
+    $("invite-btn").addEventListener("click", async () => {
+      const mine = await me();
+      const ref = mine ? `?ref=${encodeURIComponent(mine.profile.id)}` : "";
+      share({ title: data.group.name, text: `Join my league "${data.group.name}" on Clutch. Let's see who can beat the AI at sports 🏆`, url: `${location.origin}/l/${encodeURIComponent(id)}${ref}` });
+    });
+    $("leave-btn").addEventListener("click", async () => {
+      if (!confirm(`Leave ${data.group.name}?`)) return;
+      await api(`/api/groups/${encodeURIComponent(id)}/leave`, { method: "POST", body: {} });
+      toast("You left the league.");
+      load();
+    });
+    $("create-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      createGroupFrom($("create-name"));
+    });
+    load();
+  </script>
+</body>
+</html>

@@ -1,8 +1,8 @@
 // Offline support: cache the app shell, always fetch live data from the network.
-const CACHE = "clutch-v1";
+const CACHE = "clutch-v2";
 const SHELL = [
   "/", "/bots", "/leaders", "/pro", "/me", "/privacy", "/game.html", "/bot.html", "/styles.css", "/manifest.webmanifest",
-  "/js/common.js", "/js/chart.js", "/js/today.js", "/js/game.js", "/js/bots.js", "/js/bot-stats.js", "/js/rules.js",
+  "/js/common.js", "/js/chart.js", "/js/today.js", "/js/game.js", "/js/bots.js", "/js/bot-stats.js", "/js/rules.js", "/js/groups.js", "/group.html",
   "/icons/icon.svg", "/icons/icon-192.png",
 ];
 
@@ -34,6 +34,7 @@ self.addEventListener("fetch", (event) => {
           if (hit) return hit;
           if (url.pathname.startsWith("/game/")) return caches.match("/game.html");
           if (url.pathname.startsWith("/bot/")) return caches.match("/bot.html");
+          if (url.pathname.startsWith("/l/")) return caches.match("/group.html");
           return caches.match("/");
         }),
       ),
